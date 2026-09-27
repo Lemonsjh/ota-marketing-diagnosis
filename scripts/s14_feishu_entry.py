@@ -42,6 +42,22 @@ TRIGGERS = (
     "携程诊断",
     "多渠道诊断",
 )
+
+
+def _is_diagnosis_request(text: str) -> bool:
+    """Recognize ordinary diagnosis requests without requiring a fixed command."""
+    normalized = re.sub(r"[\s，,。.!！？?、：:]+", "", str(text or "")).lower()
+    if not normalized or re.search(r"(?:不要|不用|取消|停止).{0,4}(?:诊断|分析|报告)", normalized):
+        return False
+    if any(trigger.lower().replace(" ", "") in normalized for trigger in TRIGGERS):
+        return True
+    if any(term in normalized for term in (
+        "全面诊断", "诊断一下", "帮我诊断", "酒店诊断", "经营诊断",
+        "全面分析", "经营分析", "运营分析", "ota分析", "酒店体检",
+        "生成报告", "出份报告", "出个报告", "做份报告",
+    )):
+        return True
+    return bool(re.search(r"(?:分析|评估|看看|看下|看一下).{0,12}(?:酒店|经营|运营|ota|美团|携程)|(?:酒店|经营|运营|ota|美团|携程).{0,12}(?:分析|评估|报告)", normalized))
 TEMPLATE_TRIGGERS = (
     "Excel模板",
     "excel模板",
@@ -802,7 +818,19 @@ def main() -> int:
             _clear_flow_state(chat_id, sender_id)
             return _print(_result_payload(result, output_format))
 
-        if args.text and any(token in args.text for token in TRIGGERS):
+        choice = _normalize_choice(args.text)
+        if choice and state.get("state") == "awaiting_source":
+            return _print(
+                _handle_source_choice(
+                    args.text,
+                    chat_id=chat_id,
+                    sender_id=sender_id,
+                    text=args.text,
+                    output_format=output_format,
+                )
+            )
+
+        if _is_diagnosis_request(args.text):
             old_names = list(state.get("manual_room_type_names") or [])
             names = parsed_names or old_names
             new_state = _set_flow_state(
@@ -815,18 +843,6 @@ def main() -> int:
                 _source_selection_card(new_state.get("manual_room_type_names"))
                 if output_format == "card"
                 else SOURCE_SELECTION_TEXT
-            )
-
-        choice = _normalize_choice(args.text)
-        if choice and state.get("state") == "awaiting_source":
-            return _print(
-                _handle_source_choice(
-                    args.text,
-                    chat_id=chat_id,
-                    sender_id=sender_id,
-                    text=args.text,
-                    output_format=output_format,
-                )
             )
 
         if parsed_names:
@@ -857,7 +873,7 @@ def main() -> int:
             return _print(_result_payload(result, output_format))
 
         return _print(
-            "收到。需要生成 S14 OTA 诊断报告时，请发送「S14诊断」；"
+            "收到。需要生成酒店 OTA 诊断报告时，可以说「全面诊断」或「帮我做个经营分析」；"
             "人工房型名称可发送「房型名称：五人战队套房、电竞双床房」；"
             "需要 Excel 填报模板时，请发送「Excel模板」。"
         )

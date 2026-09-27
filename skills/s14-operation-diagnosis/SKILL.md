@@ -11,6 +11,7 @@ This skill is an OpenClaw wrapper. The business engine lives under `marketing_di
 Use this skill when the user asks for any of the following:
 
 - S14诊断
+- 全面诊断、帮我诊断一下
 - OTA诊断
 - OTA全面诊断
 - 运营诊断
@@ -19,6 +20,7 @@ Use this skill when the user asks for any of the following:
 - 携程诊断
 - 多渠道诊断
 - 酒店 OTA 经营分析报告
+- 帮我分析酒店经营情况、出一份经营报告
 
 ## Inputs
 

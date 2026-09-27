@@ -15,7 +15,9 @@ Rules:
 
 ## Feishu flow
 
-When the user sends `S14诊断`:
+When the user asks for a hotel OTA diagnosis or operating analysis (for example
+`全面诊断`, `帮我分析酒店经营情况`, or `S14诊断`), recognize the intent and enter
+the same source-selection flow. Do not require a fixed trigger phrase:
 
 1. Prefer the Skill runtime's `source_selection` result. For an ordinary OpenClaw reply, send only its `feishu_message` field. Never send the complete result object or provider-native `feishu_card` JSON as assistant text.
 2. OpenClaw must render rich UI through its own message/presentation layer. When executing the CLI wrapper through a shell/exec tool, always use `--format text` and send that stdout exactly once. It asks the user to type `数据库` or `上传Excel`.

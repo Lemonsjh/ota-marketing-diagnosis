@@ -70,11 +70,34 @@ class LiveS14SourceSelectionTest(unittest.TestCase):
         self.assertNotIn("选择渠道", rendered)
 
     def test_all_text_variants_use_unified_multi_platform(self) -> None:
-        for text in ("S14诊断", "美团诊断", "携程诊断", "多渠道诊断"):
+        with (
+            patch.object(self.module, "_resolved_hotel", return_value=("puyue", "璞悦酒店")),
+            patch.object(self.module, "_require_diagnosis_member", return_value="group_member"),
+        ):
+            for text in ("S14诊断", "美团诊断", "携程诊断", "多渠道诊断"):
+                with self.subTest(text=text):
+                    context = self.module._request_context(text)
+                    self.assertEqual(context["platform"], "multi")
+                    self.assertEqual(context["period_days"], 30)
+
+    def test_natural_language_diagnosis_intent(self) -> None:
+        for text in (
+            "全面诊断", "帮我做个全面诊断", "s14诊断", "帮我分析酒店经营情况",
+            "看看美团运营", "出一份经营报告",
+        ):
             with self.subTest(text=text):
-                context = self.module._request_context(text)
-                self.assertEqual(context["platform"], "multi")
-                self.assertEqual(context["period_days"], 30)
+                self.assertTrue(self.module._is_diagnosis_request(text))
+        for text in ("你好", "现在连接的是哪个数据库", "Excel模板", "不要诊断", "报告链接在哪"):
+            with self.subTest(text=text):
+                self.assertFalse(self.module._is_diagnosis_request(text))
+
+    def test_full_diagnosis_enters_source_selection(self) -> None:
+        stdout = io.StringIO()
+        argv = [str(SCRIPT), "--text", "全面诊断", "--chat-id", "chat-nl", "--sender-id", "user-nl"]
+        with patch.object(sys, "argv", argv), contextlib.redirect_stdout(stdout):
+            self.assertEqual(self.module.main(), 0)
+        self.assertIn("请选择数据来源", stdout.getvalue())
+        self.assertEqual(self.module._get_flow_state("chat-nl", "user-nl")["state"], "awaiting_source")
 
     def test_excel_wait_state_is_scoped_to_chat_and_sender(self) -> None:
         self.module._set_flow_state(

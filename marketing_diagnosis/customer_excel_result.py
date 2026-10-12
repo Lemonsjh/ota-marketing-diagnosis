@@ -40,6 +40,27 @@ def enrich_customer_excel_result(
         if isinstance(item, dict)
     }
 
+    rows = [row for row in raw_dataset.get("review_overviews", []) if row.get("review_platform") == "meituan"]
+    overview = _latest(rows, "snapshot_time")
+    reputation = by_no.get(13)
+    if overview.get("yesterday_new_review_count") is not None and reputation:
+        day = str(overview.get("yesterday_review_date") or "")[:10]
+        reputation["yesterday_review_date"] = day
+        reputation["source_table"] = overview.get("source_table")
+        for field in reputation.get("fields", []):
+            if field.get("label") == "昨日新增点评数":
+                field.update(value=overview["yesterday_new_review_count"], origin="Excel填报",
+                             note=f"统计日期：{day}；客户填写的当日新增点评数")
+        reputation["note"] = "昨日新增点评数来自Excel填报，按填写的点评统计日期展示。"
+
+    promotion = by_no.get(9)
+    performance_rows = [row for row in raw_dataset.get("promotion_finance", []) if "spend_amount" in row]
+    if promotion and performance_rows:
+        promotion["source_table"] = _latest(performance_rows, "snapshot_time").get("source_table")
+        for field in promotion.get("fields", []):
+            if field.get("origin") == "数据库原值":
+                field["origin"] = "Excel填报"
+
     scan_rows = [row for row in raw_dataset.get("scan_orders", []) if isinstance(row, dict)]
     scan_item = by_no.get(7)
     if scan_rows and isinstance(scan_item, dict):

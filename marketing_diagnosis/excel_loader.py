@@ -5,7 +5,7 @@ from typing import Any
 
 from openpyxl import load_workbook
 
-from marketing_diagnosis.customer_excel_loader_v2 import (
+from marketing_diagnosis.customer_excel_current import (
     is_customer_excel_template,
     load_customer_excel_workbook,
 )

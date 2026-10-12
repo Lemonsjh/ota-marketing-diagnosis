@@ -256,7 +256,19 @@ def _apply_excel_context(prepared: dict[str, Any], raw_dataset: dict[str, Any]) 
     """
     context = raw_dataset.pop("__excel_context__", None)
     if not isinstance(context, dict):
-        return
+        context = {}
+
+    requested_hotel = str(prepared.get("hotel_id") or "").strip()
+    workbook_hotel = str(context.get("hotel_id") or "").strip()
+    row_hotels = {
+        str(row.get("hotel_id") or "").strip()
+        for rows in raw_dataset.values() if isinstance(rows, list)
+        for row in rows if isinstance(row, dict) and row.get("hotel_id")
+    }
+    if workbook_hotel:
+        row_hotels.add(workbook_hotel)
+    if requested_hotel and any(hotel != requested_hotel for hotel in row_hotels):
+        raise ValueError("Excel酒店ID与当前酒店不一致，请检查填报文件。")
 
     for key in ("hotel_id", "hotel_name", "period_start", "period_end"):
         value = context.get(key)

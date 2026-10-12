@@ -8,6 +8,7 @@ from marketing_diagnosis.db_loader_v9 import (
     _yesterday_review_count,
 )
 from marketing_diagnosis.reporting_v32 import _reputation_card, _yesterday_date
+from marketing_diagnosis.reporting_v35 import _clean_customer_html
 from marketing_diagnosis.review_yesterday_v45 import patch_yesterday_review_count
 
 
@@ -129,6 +130,8 @@ class ReviewYesterdayTests(unittest.TestCase):
         self.assertIn("（2026-07-15）", html)
         self.assertIn("最新快照 / 2026-07-15", html)
         self.assertNotIn("最新快照 / 昨日</strong>", html)
+        self.assertIn("按点评时间统计的昨日新增点评数", html)
+        self.assertNotIn("review_time", _clean_customer_html(html))
 
     def test_report_can_recover_date_from_existing_field_note(self):
         item = {

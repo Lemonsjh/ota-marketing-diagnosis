@@ -31,7 +31,7 @@ def _pct(value: Any) -> str:
 def _chart(points: list[dict[str, Any]]) -> str:
     shares = [p["share"] for p in points if p.get("share") is not None]
     ceiling = min(1, max(.05, math.ceil(max(shares, default=0) * 1.15 / .05) * .05))
-    left, right, top, bottom = 64, 744, 42, 230
+    left, right, top, bottom = 88, 744, 42, 230
     parts = ["<svg viewBox='0 0 800 280' role='img' aria-label='过去7天每日入住间夜份额；缺失日期断开，不按零展示'>"]
     for i in range(5):
         y, value = bottom - (bottom - top) * i / 4, ceiling * i / 4
@@ -48,7 +48,9 @@ def _chart(points: list[dict[str, Any]]) -> str:
         y = bottom - (bottom - top) * share / ceiling
         if previous:
             parts.append(f"<line x1='{previous[0]}' y1='{previous[1]}' x2='{x}' y2='{y}' stroke='#16845b' stroke-width='3'/>")
-        parts.append(f"<circle cx='{x}' cy='{y}' r='5' fill='#16845b' stroke='white' stroke-width='2'><title>{day}：{_pct(share)}</title></circle><text x='{x}' y='{y - 13}' text-anchor='middle' fill='#13734f' font-size='13' font-weight='700'>{_pct(share)}</text>")
+        label_x = x + 4 if index == 0 else x - 4 if index == len(points) - 1 else x
+        anchor = "start" if index == 0 else "end" if index == len(points) - 1 else "middle"
+        parts.append(f"<circle cx='{x}' cy='{y}' r='5' fill='#16845b' stroke='white' stroke-width='2'><title>{day}：{_pct(share)}</title></circle><text x='{label_x}' y='{y - 13}' text-anchor='{anchor}' fill='#13734f' font-size='13' font-weight='700'>{_pct(share)}</text>")
         previous = x, y
     parts.append("</svg>")
     return "".join(parts)

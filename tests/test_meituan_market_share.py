@@ -46,6 +46,23 @@ def test_missing_yesterday_does_not_borrow_latest_available_day():
     assert market["daily_points"][-2]["share"] == pytest.approx(20 / 181)
 
 
+def test_chart_endpoint_labels_stay_inside_plot_away_from_y_axis():
+    import xml.etree.ElementTree as ET
+    from marketing_diagnosis.meituan_market_report import _chart
+
+    points = [{"business_date": f"2026-10-{day:02}", "share": share}
+              for day, share in zip(range(8, 15), [.0117, .0097, .0029, .0267, .0314, .0439, .0429])]
+    chart = ET.fromstring(_chart(points))
+    labels = [node for node in chart.findall("text") if node.get("font-weight") == "700"]
+    ticks = [node for node in chart.findall("text") if node.get("fill") == "#718279"]
+    assert len(labels) == 7
+    assert labels[0].get("text-anchor") == "start"
+    assert float(labels[0].get("x")) - max(float(node.get("x")) for node in ticks) >= 35
+    assert labels[-1].get("text-anchor") == "end"
+    assert float(labels[-1].get("x")) < float(chart.findall("circle")[-1].get("cx"))
+    assert [node.text for node in labels] == [f"{p['share']:.2%}" for p in points]
+
+
 def test_written_html_and_markdown_both_use_new_item(tmp_path):
     from pathlib import Path
 

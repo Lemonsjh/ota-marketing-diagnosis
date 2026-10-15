@@ -506,11 +506,14 @@ def load_mysql_dsn_dataset(
                 dataset["nearby_events"].extend(_copy_rows(rows, "meituan", table_map["meituan_nearby_events"]))
 
             if "meituan" in enabled:
+                from marketing_diagnosis.meituan_market_data import fetch_market_rows
+
+                market_rows, market_diag = fetch_market_rows(cursor, table_map["meituan_funnel"], hotel_id)
+                dataset["meituan_market_room_nights"] = _tag_rows(market_rows, table_map["meituan_funnel"])
+                diagnostics["tables"]["meituan_market_room_nights"] = market_diag
                 # 以下表直接服务于 23 项可视化规则。所有查询均保留空表/失败诊断，
                 # 由上层把 empty/error 与真实 0 分开处理。
-                yesterday = (date.today() - timedelta(days=1)).isoformat()
                 specs = [
-                    ("exposure_daily", "meituan_exposure_monthly", "business_date", "business_date DESC, snapshot_time DESC"),
                     ("user_source_monthly", "meituan_user_source_monthly", None, "period_month DESC"),
                     ("order_loss_monthly", "meituan_order_loss_monthly", None, "period_month DESC"),
                     ("joined_rights", "meituan_joined_rights", None, None),
@@ -521,30 +524,13 @@ def load_mysql_dsn_dataset(
                     order_candidates = tuple(
                         candidate.strip() for candidate in str(order_by or "").split(",") if candidate.strip()
                     )
-                    # Exposure is an upstream once-daily rolling aggregate.  A report
-                    # may be requested before yesterday's collection lands, so retain
-                    # the newest source day in the requested window instead of
-                    # turning the entire item into missing data.
-                    query_start = period_start
-                    query_end = yesterday if table_key == "meituan_exposure_monthly" else period_end
                     rows, diag = _profiled_fetch(
                         cursor, table_map[table_key], limit,
                         hotel_id=hotel_id, date_column=date_column,
-                        period_start=query_start if date_column else None,
-                        period_end=query_end if date_column else None,
+                        period_start=period_start if date_column else None,
+                        period_end=period_end if date_column else None,
                         order_candidates=order_candidates,
                     )
-                    if section == "exposure_daily":
-                        rows = _latest_exposure_snapshot(rows, yesterday)
-                        diag.update({
-                            "target_business_date": yesterday,
-                            "selected_business_date": (
-                                str(rows[0].get("__exposure_data_as_of") or "") if rows else None
-                            ),
-                            "fallback_used": bool(rows and rows[0].get("__exposure_snapshot_fallback")),
-                            "rows_used": len(rows),
-                            "selection_rule": "yesterday snapshot; otherwise latest available source day in requested period",
-                        })
                     if section in {"joined_rights", "promotion_status", "video_upload_status"}:
                         rows = _latest_snapshot(rows)
                     if section == "order_loss_monthly" and rows:
@@ -565,7 +551,7 @@ def load_mysql_dsn_dataset(
                 {"section": "review_overviews", "rows": len(dataset["review_overviews"]), "rule": "latest platform review score/count summary"},
                 {"section": "review_rankings", "rows": len(dataset["review_rankings"]), "rule": "latest platform review keyword ranking"},
                 {"section": "nearby_events", "rows": len(dataset["nearby_events"]), "rule": "nearby event feed for demand context"},
-                {"section": "exposure_daily", "rows": len(dataset["exposure_daily"]), "rule": "yesterday latest monthly-source total/non-ad/ad exposure snapshot"},
+                {"section": "meituan_market_room_nights", "rows": len(dataset["meituan_market_room_nights"]), "rule": "last seven completed business days; exact room-night metric; own plus peer mean times other hotel count"},
                 {"section": "user_source_monthly", "rows": len(dataset["user_source_monthly"]), "rule": "latest monthly local/nonlocal/new/returning user mix"},
                 {"section": "order_loss_monthly", "rows": len(dataset["order_loss_monthly"]), "rule": "latest monthly competitor order loss"},
                 {"section": "joined_rights", "rows": len(dataset["joined_rights"]), "rule": "joined rights list"},

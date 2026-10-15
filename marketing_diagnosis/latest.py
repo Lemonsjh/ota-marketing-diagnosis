@@ -26,6 +26,7 @@ def normalize_dataset(raw):
     sections = result.setdefault("sections", {})
     diagnostics = result.setdefault("diagnostics", {})
     for section in (
+        "meituan_market_room_nights",
         "ctrip_promotion_activity",
         "ctrip_promotion_activity_performance",
         "ctrip_video_upload_status",

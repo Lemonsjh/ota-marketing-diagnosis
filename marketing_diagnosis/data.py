@@ -21,6 +21,7 @@ SECTIONS = [
     # S14 可视化规则手册专用数据集。保留数据库原字段，由
     # visual_diagnosis.py 统一计算，避免把“缺失”误判成真实 0。
     "exposure_daily",
+    "meituan_market_room_nights",
     "user_source_monthly",
     "promotion_finance",
     "promotion_revenue",
@@ -32,6 +33,7 @@ SECTIONS = [
 ]
 
 OPTIONAL_SECTIONS = {
+    "meituan_market_room_nights",
     "hotel_monthly", "hotel_performance_daily", "room_type_performance_daily", "promotions", "promotion_products", "review_overviews",
     "review_rankings", "nearby_events", "competitors", "exposure_daily",
     "user_source_monthly", "promotion_finance", "promotion_revenue",

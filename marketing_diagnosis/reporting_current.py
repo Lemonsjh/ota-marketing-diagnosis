@@ -12,44 +12,70 @@ from marketing_diagnosis import ctrip_rights_center_compact as _ctrip_rights_cen
 from marketing_diagnosis.channel_score_totals import patch_channel_score_totals
 from marketing_diagnosis.ctrip_manual_listing import patch_html
 from marketing_diagnosis.ctrip_page_entry_compact import patch_page_entry_html
-from marketing_diagnosis.meituan_exposure_monthly import patch_report_html
+from marketing_diagnosis.meituan_market_report import patch_market_html
 from marketing_diagnosis.manual_supplement import patch_manual_supplements
 from marketing_diagnosis.visual_diagnosis import patch_video_upload_copy
 from marketing_diagnosis.reporting_runtime_v52 import (
     build_ctrip_html as _build_ctrip_html,
     build_dual_channel_html as _build_dual_channel_html,
     build_html as _build_html,
-    build_markdown,
-    build_meituan_html,
+    build_markdown as _build_markdown,
+    build_meituan_html as _build_meituan_html,
     write_reports as _write_reports,
 )
 
 
 def build_ctrip_html(result: dict[str, Any]) -> str:
     return patch_manual_supplements(
-        patch_page_entry_html(patch_video_upload_copy(patch_report_html(patch_html(patch_channel_score_totals(_build_ctrip_html(result), result), result))), result),
+        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_build_ctrip_html(result), result), result)), result),
         result,
     )
 
 
 def build_dual_channel_html(result: dict[str, Any]) -> str:
-    return patch_manual_supplements(
-        patch_page_entry_html(patch_video_upload_copy(patch_report_html(patch_html(patch_channel_score_totals(_build_dual_channel_html(result), result), result))), result),
+    return patch_market_html(patch_manual_supplements(
+        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_build_dual_channel_html(result), result), result)), result),
         result,
-    )
+    ), result)
 
 
 def build_html(result: dict[str, Any]) -> str:
-    return patch_manual_supplements(
-        patch_page_entry_html(patch_video_upload_copy(patch_report_html(patch_html(patch_channel_score_totals(_build_html(result), result), result))), result),
+    return patch_market_html(patch_manual_supplements(
+        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_build_html(result), result), result)), result),
         result,
-    )
+    ), result)
+
+
+def build_meituan_html(result: dict[str, Any]) -> str:
+    return patch_market_html(patch_channel_score_totals(_build_meituan_html(result), result), result)
+
+
+def build_markdown(result: dict[str, Any]) -> str:
+    from marketing_diagnosis.meituan_market_share import TITLE
+    from marketing_diagnosis.meituan_exposure_monthly import _find_item
+    from marketing_diagnosis.meituan_market_report import _num, _pct
+
+    document = _build_markdown(result).replace("曝光数据分析", TITLE)
+    item = _find_item((result.get("visual_diagnosis") or {}).get("items"), 3)
+    if not item or "market_share" not in item:
+        return document
+    market = item["market_share"]
+    yesterday = market["yesterday"]
+    lines = [f"\n\n## 美团第三项：{TITLE}",
+             f"昨日本店大盘份额（{yesterday['business_date']}）：{_pct(yesterday['share'])}",
+             f"本店入住间夜：{_num(yesterday['own_room_nights'])}；大盘入住间夜（估算）：{_num(yesterday['market_room_nights'])}",
+             "\n过去7天每日份额："]
+    lines.extend(f"- {p['business_date']}：{_pct(p['share'])}" for p in market["daily_points"])
+    lines.append("\n缺失数据不按0处理；大盘与份额为估算值。评分规则待确认。")
+    return document + "\n\n".join(lines)
 
 
 def write_reports(result: dict[str, Any], output_dir: str | Path) -> dict[str, str]:
     paths = _write_reports(result, output_dir)
     report_path = Path(paths["report_html"])
     report_path.write_text(build_html(result), encoding="utf-8")
+    if paths.get("report_markdown"):
+        Path(paths["report_markdown"]).write_text(build_markdown(result), encoding="utf-8")
     return paths
 
 

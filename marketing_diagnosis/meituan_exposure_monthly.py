@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 
-SOURCE_TABLE = "hotel_puyue.meituan_ota_exposure_source_monthly"
+SOURCE_TABLE = "meituan_ota_exposure_source_monthly"
 SOURCE_FIELDS = [
     "business_date",
     "total_exposure",

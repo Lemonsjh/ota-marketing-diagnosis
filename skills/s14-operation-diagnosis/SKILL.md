@@ -54,8 +54,8 @@ Item 11 is a mandatory manual-input score. Do not silently use database product 
 
 Item 02 must always form a score and display the calculation.
 
-- Source: `hotel_puyue.jl11_room_type_classification`.
-- Filter: `section=summary`.
+- Source: `jl11_room_type_classification` in the configured hotel database.
+- Filter: `section=summary`, matched by exact `room_type_name` against the same hotel's latest `pms_room_type_forecast` batch. Deduplicate names and retain one batch; disclose its date when it differs from the reporting period.
 - Use the near-30-day fields `room_count`, `room_nights`, `occupancy_rate`, `room_revenue`, `average_room_price`, and `revpar`.
 - Low-efficiency room type: near-month `occupancy_rate < 60%`.
 - Low-efficiency ratio: low-efficiency room type count divided by all distinct on-sale room types.

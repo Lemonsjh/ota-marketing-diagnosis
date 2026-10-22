@@ -90,7 +90,7 @@ git push origin main
 配置环境变量：
 
 ```bash
-export S14_DB_DSN='mysql+pymysql://openclaw_user:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:3306/hotel_puyue?charset=utf8mb4'
+export S14_DB_DSN='mysql+pymysql://openclaw_user:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:3306/YOUR_HOTEL_DATABASE?charset=utf8mb4'
 export S14_REPORT_OUTPUT_DIR='/opt/openclaw/workspaces/ota-marketing-diagnosis/public/s14-reports'
 export S14_PUBLIC_BASE_URL='http://47.108.200.194:8088/s14-reports'
 ```
@@ -192,7 +192,7 @@ Excel 支持以下 sheet：
 在服务器上设置 DSN：
 
 ```bash
-export S14_DB_DSN='mysql+pymysql://openclaw_user:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:3306/hotel_puyue?charset=utf8mb4'
+export S14_DB_DSN='mysql+pymysql://openclaw_user:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:3306/YOUR_HOTEL_DATABASE?charset=utf8mb4'
 ```
 
 运行：
@@ -204,10 +204,10 @@ ota-marketing-diagnosis diagnose-db --dsn-env S14_DB_DSN --output reports
 也可以直接传 DSN，但不建议把密码写进 shell 历史：
 
 ```bash
-ota-marketing-diagnosis diagnose-db --dsn 'mysql+pymysql://user:password@127.0.0.1:3306/hotel_puyue?charset=utf8mb4' --output reports
+ota-marketing-diagnosis diagnose-db --dsn 'mysql+pymysql://user:password@127.0.0.1:3306/YOUR_HOTEL_DATABASE?charset=utf8mb4' --output reports
 ```
 
-`diagnose-db` 会按内置 `puyue_mysql_reference` profile 读取真实表并聚合成报告数据。报告里的“数据来源核验”章节会展示实际查到的表、行数、过滤条件和字段样本。
+`diagnose-db` 会从连接配置指定的酒店数据库读取真实表，并按酒店范围和表字段映射聚合成报告数据；库名不固定。报告里的“数据来源核验”章节会展示实际查到的表、行数、过滤条件和字段样本。
 
 ## 数据库画像参考
 

@@ -320,7 +320,7 @@ class S14OperationDiagnosis:
                 period_start=prepared.get("period_start"),
                 period_end=prepared.get("period_end"),
             )
-            data_source = "hotel_puyue_mysql"
+            data_source = "hotel_mysql"
         else:
             raise ValueError(f"unsupported S14 data_source_mode: {mode}")
 

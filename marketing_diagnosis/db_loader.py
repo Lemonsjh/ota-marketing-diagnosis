@@ -146,7 +146,7 @@ def _profiled_fetch(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Query against actual columns while preserving every applied filter in diagnostics.
 
-    The ``hotel_puyue`` schema is already hotel-scoped.  If a table has no
+    The configured DSN selects the hotel schema. If a table has no
     ``hotel_id`` column we therefore do not invent a filter that would make the
     query fail.  Date/order clauses follow the same rule.
     """

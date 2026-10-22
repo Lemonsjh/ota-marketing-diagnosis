@@ -6,6 +6,7 @@ from marketing_diagnosis.ctrip_flow_rank_rules import build_flow_item
 from marketing_diagnosis.ctrip_rights_data import build_rights_item
 from marketing_diagnosis.ctrip_score_alignment import align_ctrip_scores
 from marketing_diagnosis.meituan_market_share import patch_market_share
+from marketing_diagnosis.meituan_recent_reviews import attach_recent_reviews
 from marketing_diagnosis.rules_v5 import _refresh_ctrip_summary
 from marketing_diagnosis.rules_v5 import process as upstream_process
 
@@ -134,6 +135,7 @@ def process(data: dict[str, Any]) -> dict[str, Any]:
     result = upstream_process(data)
     sections = data.get("sections") or {}
     patch_market_share(result, sections, hotel_id=data.get("hotel_id"))
+    attach_recent_reviews(result, data)
     items = result.setdefault("ctrip_items", {})
 
     existing_flow = items.get("3") or items.get(3)

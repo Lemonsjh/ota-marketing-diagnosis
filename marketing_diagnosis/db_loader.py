@@ -482,6 +482,12 @@ def load_mysql_dsn_dataset(
                 rows, diag = _fetch(cursor, table_map[f"{plat}_reviews"], limit, _where(filters), params, "review_time DESC")
                 diagnostics["tables"][f"{plat}_reviews"] = diag
                 dataset["reviews"].extend(_reviews(_tag_rows(rows, table_map[f"{plat}_reviews"]), plat))
+                if plat == "meituan":
+                    from marketing_diagnosis.meituan_recent_reviews import DIAGNOSTIC, SECTION, load_recent_reviews
+
+                    recent, recent_diag = load_recent_reviews(cursor, table_map["meituan_reviews"], hotel_id)
+                    dataset[SECTION] = recent
+                    diagnostics["tables"][DIAGNOSTIC] = recent_diag
 
                 rows, diag = _profiled_fetch(
                     cursor, table_map[f"{plat}_review_overview"], 20,

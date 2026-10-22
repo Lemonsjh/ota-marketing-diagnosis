@@ -515,7 +515,8 @@ def load_mysql_dsn_dataset(
                 # 由上层把 empty/error 与真实 0 分开处理。
                 specs = [
                     ("user_source_monthly", "meituan_user_source_monthly", None, "period_month DESC"),
-                    ("order_loss_monthly", "meituan_order_loss_monthly", None, "period_month DESC"),
+                    ("order_loss_monthly", "meituan_order_loss_monthly", None,
+                     "period_month DESC, competitor_loss_amount DESC, competitor_loss_order_count DESC, competitor_poi_id ASC"),
                     ("joined_rights", "meituan_joined_rights", None, None),
                     ("promotion_status", "meituan_promotion_status", None, None),
                     ("video_upload_status", "meituan_video_upload_status", None, None),

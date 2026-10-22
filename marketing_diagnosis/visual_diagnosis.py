@@ -57,6 +57,16 @@ def _n(value: Any) -> float | None:
         return None
 
 
+def _loss_sort_key(row: dict[str, Any]) -> tuple:
+    amount = _n(row.get("competitor_loss_amount"))
+    orders = _n(row.get("competitor_loss_order_count"))
+    try:
+        poi_id = int(row.get("competitor_poi_id"))
+    except (TypeError, ValueError):
+        poi_id = float("inf")
+    return (amount is None, -(amount or 0), orders is None, -(orders or 0), poi_id)
+
+
 def _pct_value(value: Any) -> float | None:
     number = _n(value)
     if number is None:
@@ -363,14 +373,14 @@ def build_visual_diagnosis(sections: dict[str, list[dict[str, Any]]], hotel_name
     by_no[11] = _item(11, ITEMS[10][1], 4, True, status=room_status, ratio=room_ratio, fields=room_fields,
                            note="名称长度>5且命中卖点才满分；恰好5字、多房型汇总和卖点词库未冻结。")
 
-    losses = sections.get("order_loss_monthly") or []
+    losses = sorted(sections.get("order_loss_monthly") or [], key=_loss_sort_key)
     loss_fields = []
     for row in losses:
         loss_fields.append(_field(str(row.get("competitor_hotel_name") or "未命名竞对"),
                                   row.get("competitor_loss_order_count"),
                                   f"流失金额 {row.get('competitor_loss_amount')}; 流失房型 {row.get('lost_room_types_text') or '暂无'}; 关注 {row.get('follow_status')}"))
     by_no[12] = _item(12, ITEMS[11][1], 0, False, status="success" if losses else "missing", fields=loss_fields,
-                           note="只展示，不参与总分；follow_status 1=已关注，0=未关注。")
+                           note="按流失金额从高到低排序；金额相同时按流失订单数降序、竞对ID升序。只展示，不参与总分；follow_status 1=已关注，0=未关注。")
     by_no[12]["records"] = losses
 
     overviews = sections.get("review_overviews") or []

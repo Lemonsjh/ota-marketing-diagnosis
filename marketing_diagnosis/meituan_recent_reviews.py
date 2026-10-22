@@ -13,8 +13,9 @@ FIELDS = (
 )
 SECTION = "meituan_recent_reviews"
 DIAGNOSTIC = "meituan_reviews_recent_15d"
+PAGE_SIZE = 15
 _CARD = re.compile(r"<article\b[^>]*\bid=['\"]rule-13['\"][^>]*>.*?</article>", re.S)
-_DETAIL = re.compile(r"<section id='meituan-recent-reviews'>.*?</section>", re.S)
+_DETAIL = re.compile(r"<section id='meituan-recent-reviews'[^>]*>.*?</section>", re.S)
 STYLE = """<style id='MEITUAN_RECENT_REVIEWS_STYLE'>
 #meituan-recent-reviews{padding:20px;border-top:1px solid #e1e9e5}
 #meituan-recent-reviews h4{margin:0 0 8px;font-size:16px}
@@ -25,7 +26,42 @@ STYLE = """<style id='MEITUAN_RECENT_REVIEWS_STYLE'>
 #meituan-recent-reviews th{white-space:nowrap;background:#f5f9f7}
 #meituan-recent-reviews td:nth-child(4){min-width:280px;max-width:650px;white-space:pre-wrap;overflow-wrap:anywhere}
 #meituan-recent-reviews td:nth-child(5){min-width:145px;white-space:nowrap}
+#meituan-recent-reviews tr[hidden]{display:none!important}
+#meituan-recent-reviews .review-pages{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;margin-top:16px;font-size:13px}
+#meituan-recent-reviews button{padding:7px 12px;border:1px solid #cddbd3;border-radius:6px;background:#fff;color:#284b3a;cursor:pointer}
+#meituan-recent-reviews button:disabled{opacity:.45;cursor:default}
+#meituan-recent-reviews summary{cursor:pointer}
+#meituan-recent-reviews summary span{color:#28704c;white-space:nowrap}
+#meituan-recent-reviews details[open] summary{margin-bottom:8px}
 </style>"""
+SCRIPT = """<script id='MEITUAN_RECENT_REVIEWS_SCRIPT'>
+(() => {
+  const section = document.getElementById('meituan-recent-reviews');
+  if (!section) return;
+  const rows = Array.from(section.querySelectorAll('tr[data-review-row]'));
+  const size = Number(section.dataset.pageSize);
+  const pages = Math.max(1, Math.ceil(rows.length / size));
+  const previous = section.querySelector('[data-review-prev]');
+  const next = section.querySelector('[data-review-next]');
+  const status = section.querySelector('[data-review-page]');
+  let page = 1;
+  function render() {
+    rows.forEach((row, index) => {
+      row.hidden = index < (page - 1) * size || index >= page * size;
+    });
+    status.textContent = `第 ${page} / ${pages} 页 · 共 ${rows.length} 条 · 每页 ${size} 条`;
+    previous.disabled = page <= 1;
+    next.disabled = page >= pages;
+  }
+  previous.addEventListener('click', () => {
+    if (page > 1) { page -= 1; render(); }
+  });
+  next.addEventListener('click', () => {
+    if (page < pages) { page += 1; render(); }
+  });
+  render();
+})();
+</script>"""
 
 
 def _window() -> tuple[dt.date, dt.date]:
@@ -101,29 +137,50 @@ def _reply(value: Any) -> str:
     return "未知"
 
 
+def _content(value: Any) -> str:
+    text = "" if value is None else str(value)
+    if len(text) <= 120 and text.count("\n") <= 2:
+        return _e(value)
+    preview = " ".join(text.split())[:120]
+    return (f"<details><summary>{_e(preview)}… <span>展开／收起全文</span></summary>"
+            f"<div>{_e(text)}</div></details>")
+
+
 def _table(payload: dict[str, Any]) -> str:
     rows = payload.get("rows") or []
     start, end = payload.get("period_start"), payload.get("period_end")
     body = []
-    for row in rows:
+    for index, row in enumerate(rows):
         values = [
             row.get("channel_source"), row.get("reviewer_name_masked"),
             row.get("review_score"), row.get("review_content"),
             str(row.get("review_time") or "").replace("T", " "),
             _reply(row.get("is_replied")),
         ]
-        body.append("<tr>" + "".join(f"<td>{_e(v)}</td>" for v in values) + "</tr>")
+        cells = [f"<td>{_content(value) if col == 3 else _e(value)}</td>"
+                 for col, value in enumerate(values)]
+        hidden = " hidden" if index >= PAGE_SIZE else ""
+        body.append(f"<tr data-review-row{hidden}>" + "".join(cells) + "</tr>")
     if not body:
         message = ("近15天暂无评论。" if payload.get("data_status") == "ok"
                    else "评论明细暂未取得，请检查数据来源。")
         body.append(f"<tr><td colspan='6'>{message}</td></tr>")
     headers = ("渠道", "用户名（脱敏）", "评分", "评论内容", "评论时间", "是否已回复")
+    pages = max(1, (len(rows) + PAGE_SIZE - 1) // PAGE_SIZE)
+    controls = (
+        "<nav class='review-pages' aria-label='评论分页'>"
+        "<button type='button' data-review-prev disabled>上一页</button>"
+        f"<span data-review-page role='status' aria-live='polite'>第 1 / {pages} 页 · 共 {len(rows)} 条 · 每页 {PAGE_SIZE} 条</span>"
+        f"<button type='button' data-review-next{' disabled' if pages == 1 else ''}>下一页</button></nav>"
+    )
     return (
-        "<section id='meituan-recent-reviews'><h4>近15天评论明细（含当日）</h4>"
+        f"<section id='meituan-recent-reviews' data-page-size='{PAGE_SIZE}'><h4>近15天评论明细（含当日）</h4>"
         f"<p>{_e(start)} 至 {_e(end)} · 共 {len(rows)} 条 · 按评论时间从新到旧展示</p>"
         "<div class='table-scroll'><table><thead><tr>"
         + "".join(f"<th>{name}</th>" for name in headers)
-        + "</tr></thead><tbody>" + "".join(body) + "</tbody></table></div></section>"
+        + "</tr></thead><tbody>" + "".join(body) + "</tbody></table></div>"
+        + controls + "<noscript><style>#meituan-recent-reviews tr[hidden]{display:table-row!important}"
+        "#meituan-recent-reviews .review-pages{display:none}</style></noscript></section>"
     )
 
 
@@ -134,8 +191,10 @@ def patch_recent_reviews_html(document: str, result: dict[str, Any]) -> str:
     if not payload:
         return document
     document = _DETAIL.sub("", document)
+    document = re.sub(r"<style id='MEITUAN_RECENT_REVIEWS_STYLE'>.*?</style>", "", document, flags=re.S)
+    document = re.sub(r"<script id='MEITUAN_RECENT_REVIEWS_SCRIPT'>.*?</script>", "", document, flags=re.S)
     document, count = _CARD.subn(
-        lambda match: match.group(0).replace("</article>", _table(payload) + "</article>"),
+        lambda match: match.group(0).replace("</article>", _table(payload) + "</article>" + SCRIPT),
         document, count=1,
     )
     if count and "id='MEITUAN_RECENT_REVIEWS_STYLE'" not in document:

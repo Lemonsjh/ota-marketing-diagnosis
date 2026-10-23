@@ -11,8 +11,7 @@ from zoneinfo import ZoneInfo
 SECTION = "meituan_review_daily_counts"
 DIAGNOSTIC = "meituan_review_trend_15d"
 _CARD = re.compile(r"<article\b[^>]*\bid=['\"]rule-13['\"][^>]*>.*?</article>", re.S)
-SERIES = (("total", "合计", "#087f64"), ("meituan", "美团", "#2878b8"),
-          ("dianping", "大众点评", "#c77b25"))
+SERIES = (("total", "合计", "#087f64"),)
 STYLE = """<style id='MEITUAN_REVIEW_TREND_STYLE'>
 #meituan-review-trend{padding:24px 20px;border-top:1px solid #e1e9e5}
 #meituan-review-trend h4{margin:0 0 8px;font-size:17px;color:#173e32}
@@ -129,7 +128,7 @@ def _plot(points: list[dict[str, Any]]) -> str:
     y = lambda value: bottom - (bottom - top) * value / maximum
     parts = ["<svg viewBox='0 0 920 300' role='img' aria-labelledby='review-trend-title review-trend-desc'>",
              "<title id='review-trend-title'>近15天每日新增评论数</title>",
-             "<desc id='review-trend-desc'>按评论发布时间逐日统计，包含合计、美团和大众点评；悬停或聚焦数据点查看日期和条数。</desc>",
+             "<desc id='review-trend-desc'>按评论发布时间逐日统计各渠道新增评论合计；悬停或聚焦数据点查看日期和条数。</desc>",
              f"<rect x='{x(14)-22:.1f}' y='{top}' width='44' height='{bottom-top}' fill='#edf5ef'/>"]
     for tick in range(5):
         value = tick * step
@@ -138,15 +137,12 @@ def _plot(points: list[dict[str, Any]]) -> str:
     for index, point in enumerate(points):
         label = point["review_date"][5:]
         parts.append(f"<text x='{x(index):.1f}' y='274' text-anchor='middle'>{_e(label)}</text>")
-    series = list(SERIES)
-    if any(point["other"] for point in points):
-        series.append(("other", "其他渠道", "#8668a0"))
-    for key, label, color in reversed(series):
+    for key, label, color in SERIES:
         coordinates = " ".join(f"{x(i):.1f},{y(point[key]):.1f}" for i, point in enumerate(points))
-        parts.append(f"<polyline points='{coordinates}' fill='none' stroke='{color}' stroke-width='{3 if key == 'total' else 2}'/>")
+        parts.append(f"<polyline points='{coordinates}' fill='none' stroke='{color}' stroke-width='3'/>")
         for index, point in enumerate(points):
             tip = _e(f"{point['review_date']} · {label}：{point[key]}条")
-            parts.append(f"<circle cx='{x(index):.1f}' cy='{y(point[key]):.1f}' r='{4 if key == 'total' else 3}' fill='{color}' tabindex='0' aria-label='{tip}'><title>{tip}</title></circle>")
+            parts.append(f"<circle cx='{x(index):.1f}' cy='{y(point[key]):.1f}' r='4' fill='{color}' tabindex='0' aria-label='{tip}'><title>{tip}</title></circle>")
     return "".join(parts) + "</svg>"
 
 
@@ -156,9 +152,8 @@ def _chart(payload: dict[str, Any]) -> str:
                f"<p>{_e(payload['period_start'])} 至 {_e(payload['period_end'])}（含当日） · 按评论发布时间统计</p>")
     if not points:
         return heading + "<p>评论趋势暂未取得，请检查数据来源。</p></section>"
-    series = list(SERIES) + ([("other", "其他渠道", "#8668a0")] if any(p["other"] for p in points) else [])
     legend = "".join(f"<span><i style='--line:{color}'></i>{label} {_e(sum(p[key] for p in points))}条</span>"
-                     for key, label, color in series)
+                     for key, label, color in SERIES)
     return (heading + f"<div class='review-legend'>{legend}</div><div class='review-plot'>"
             + _plot(points) + "</div><p class='review-note'>纵轴：新增评论数（条）；横轴：评论日期。"
             "无评论日期显示0；右侧浅色区域为当日，当日尚未结束，数据截至报告生成时。"

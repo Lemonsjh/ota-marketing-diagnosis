@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 SECTION = "meituan_review_daily_counts"
 DIAGNOSTIC = "meituan_review_trend_15d"
 _CARD = re.compile(r"<article\b[^>]*\bid=['\"]rule-13['\"][^>]*>.*?</article>", re.S)
-SERIES = (("total", "合计", "#087f64"),)
+SERIES = (("total", "合计（美团点评＋大众点评）", "#087f64"),)
 STYLE = """<style id='MEITUAN_REVIEW_TREND_STYLE'>
 #meituan-review-trend{padding:24px 20px;border-top:1px solid #e1e9e5}
 #meituan-review-trend h4{margin:0 0 8px;font-size:17px;color:#173e32}
@@ -109,7 +109,7 @@ def attach_recent_reviews(result: dict[str, Any], data: dict[str, Any]) -> None:
             if point is not None:
                 count = int(row.get("review_count") or 0)
                 point[_channel(row.get("channel_source"))] += count
-                point["total"] += count
+                point["total"] = point["meituan"] + point["dianping"]
     item["review_trend"] = {
         "period_start": start_day, "period_end": end_day, "period_days": 15,
         "includes_today": True, "data_status": diagnostic.get("status") or "not_integrated",
@@ -129,7 +129,7 @@ def _plot(points: list[dict[str, Any]]) -> str:
     y = lambda value: bottom - (bottom - top) * value / maximum
     parts = ["<svg viewBox='0 0 920 300' role='img' aria-labelledby='review-trend-title review-trend-desc'>",
              "<title id='review-trend-title'>近15天每日新增评论数</title>",
-             "<desc id='review-trend-desc'>按评论发布时间逐日统计各渠道新增评论合计；悬停或聚焦数据点查看日期和条数。</desc>",
+             "<desc id='review-trend-desc'>按评论发布时间逐日统计美团点评与大众点评的新增评论合计；悬停或聚焦数据点查看日期和条数。</desc>",
              f"<rect x='{x(14)-22:.1f}' y='{top}' width='44' height='{bottom-top}' fill='#edf5ef'/>"]
     for tick in range(5):
         value = tick * step
@@ -156,7 +156,7 @@ def _chart(payload: dict[str, Any]) -> str:
     legend = "".join(f"<span><i style='--line:{color}'></i>{label} {_e(sum(p[key] for p in points))}条</span>"
                      for key, label, color in SERIES)
     return (heading + f"<div class='review-legend'>{legend}</div><div class='review-plot'>"
-            + _plot(points) + "</div><p class='review-note'>纵轴：新增评论数（条）；横轴：评论日期。"
+            + _plot(points) + "</div><p class='review-note'>合计＝美团点评新增数＋大众点评新增数。纵轴：新增评论数（条）；横轴：评论日期。"
             "无评论日期显示0；右侧浅色区域为当日，当日尚未结束，数据截至报告生成时。"
             "悬停或聚焦数据点可查看具体条数；本图不参与口碑评分。</p></section>")
 

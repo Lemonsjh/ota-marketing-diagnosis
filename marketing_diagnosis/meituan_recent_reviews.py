@@ -1,67 +1,31 @@
-"""Read and display the six approved review fields for the recent 15 days."""
+"""Meituan reputation: daily review counts and a 15-day trend chart."""
 from __future__ import annotations
 
 import datetime as dt
 import html
+import math
 import re
 from typing import Any
 from zoneinfo import ZoneInfo
 
-FIELDS = (
-    "channel_source", "reviewer_name_masked", "review_score",
-    "review_content", "review_time", "is_replied",
-)
-SECTION = "meituan_recent_reviews"
-DIAGNOSTIC = "meituan_reviews_recent_15d"
-PAGE_SIZE = 15
+SECTION = "meituan_review_daily_counts"
+DIAGNOSTIC = "meituan_review_trend_15d"
 _CARD = re.compile(r"<article\b[^>]*\bid=['\"]rule-13['\"][^>]*>.*?</article>", re.S)
-_DETAIL = re.compile(r"<section id='meituan-recent-reviews'[^>]*>.*?</section>", re.S)
-STYLE = """<style id='MEITUAN_RECENT_REVIEWS_STYLE'>
-#meituan-recent-reviews{padding:20px;border-top:1px solid #e1e9e5}
-#meituan-recent-reviews h4{margin:0 0 8px;font-size:16px}
-#meituan-recent-reviews p{margin:0 0 14px;color:#687b72;font-size:12px}
-#meituan-recent-reviews .table-scroll{overflow-x:auto}
-#meituan-recent-reviews table{width:100%;min-width:850px;border-collapse:collapse}
-#meituan-recent-reviews th,#meituan-recent-reviews td{padding:12px;border-bottom:1px solid #e4ebe7;text-align:left;vertical-align:top}
-#meituan-recent-reviews th{white-space:nowrap;background:#f5f9f7}
-#meituan-recent-reviews td:nth-child(4){min-width:280px;max-width:650px;white-space:pre-wrap;overflow-wrap:anywhere}
-#meituan-recent-reviews td:nth-child(5){min-width:145px;white-space:nowrap}
-#meituan-recent-reviews tr[hidden]{display:none!important}
-#meituan-recent-reviews .review-pages{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;margin-top:16px;font-size:13px}
-#meituan-recent-reviews button{padding:7px 12px;border:1px solid #cddbd3;border-radius:6px;background:#fff;color:#284b3a;cursor:pointer}
-#meituan-recent-reviews button:disabled{opacity:.45;cursor:default}
-#meituan-recent-reviews summary{cursor:pointer}
-#meituan-recent-reviews summary span{color:#28704c;white-space:nowrap}
-#meituan-recent-reviews details[open] summary{margin-bottom:8px}
+SERIES = (("total", "合计", "#087f64"), ("meituan", "美团", "#2878b8"),
+          ("dianping", "大众点评", "#c77b25"))
+STYLE = """<style id='MEITUAN_REVIEW_TREND_STYLE'>
+#meituan-review-trend{padding:24px 20px;border-top:1px solid #e1e9e5}
+#meituan-review-trend h4{margin:0 0 8px;font-size:17px;color:#173e32}
+#meituan-review-trend p{margin:0 0 14px;color:#687b72;font-size:12px}
+#meituan-review-trend .review-legend{display:flex;gap:20px;flex-wrap:wrap;margin:16px 0;font-size:13px}
+#meituan-review-trend .review-legend i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px;background:var(--line)}
+#meituan-review-trend .review-plot{overflow-x:auto;border:1px solid #e4ebe7;border-radius:12px;background:#fbfdfc}
+#meituan-review-trend svg{display:block;width:100%;min-width:720px;height:auto}
+#meituan-review-trend svg text{font-family:inherit;fill:#64786e;font-size:12px}
+#meituan-review-trend circle{cursor:help;stroke:#fff;stroke-width:1.5}
+#meituan-review-trend circle:focus{outline:2px solid #174e3d}
+#meituan-review-trend .review-note{margin-top:12px}
 </style>"""
-SCRIPT = """<script id='MEITUAN_RECENT_REVIEWS_SCRIPT'>
-(() => {
-  const section = document.getElementById('meituan-recent-reviews');
-  if (!section) return;
-  const rows = Array.from(section.querySelectorAll('tr[data-review-row]'));
-  const size = Number(section.dataset.pageSize);
-  const pages = Math.max(1, Math.ceil(rows.length / size));
-  const previous = section.querySelector('[data-review-prev]');
-  const next = section.querySelector('[data-review-next]');
-  const status = section.querySelector('[data-review-page]');
-  let page = 1;
-  function render() {
-    rows.forEach((row, index) => {
-      row.hidden = index < (page - 1) * size || index >= page * size;
-    });
-    status.textContent = `第 ${page} / ${pages} 页 · 共 ${rows.length} 条 · 每页 ${size} 条`;
-    previous.disabled = page <= 1;
-    next.disabled = page >= pages;
-  }
-  previous.addEventListener('click', () => {
-    if (page > 1) { page -= 1; render(); }
-  });
-  next.addEventListener('click', () => {
-    if (page < pages) { page += 1; render(); }
-  });
-  render();
-})();
-</script>"""
 
 
 def _window() -> tuple[dt.date, dt.date]:
@@ -70,6 +34,7 @@ def _window() -> tuple[dt.date, dt.date]:
 
 
 def load_recent_reviews(cursor, table: str, hotel_id: str | None):
+    """Read only grouped counts; no reviewer names or review content."""
     from marketing_diagnosis.db_loader import _safe_identifier, _table_columns
 
     start, end = _window()
@@ -79,124 +44,146 @@ def load_recent_reviews(cursor, table: str, hotel_id: str | None):
         "period_days": 15, "includes_today": True,
     }
     columns, error = _table_columns(cursor, table)
-    if error or not {"hotel_id", *FIELDS}.issubset(columns) or not hotel_id:
+    if error or not {"hotel_id", "channel_source", "review_time"}.issubset(columns) or not hotel_id:
         return [], {**diagnostic, "status": "error" if error else "schema_drift"}
-    selected = ", ".join(_safe_identifier(field) for field in FIELDS)
-    order = "review_time DESC" + (", id DESC" if "id" in columns else "")
     try:
         cursor.execute(
-            f"SELECT {selected} FROM {_safe_identifier(table)} "
+            "SELECT DATE(review_time) AS review_date, channel_source, COUNT(*) AS review_count "
+            f"FROM {_safe_identifier(table)} "
             "WHERE hotel_id=%s AND review_time>=%s AND review_time<%s "
-            f"ORDER BY {order}",
+            "GROUP BY DATE(review_time), channel_source ORDER BY review_date, channel_source",
             (hotel_id, start.isoformat(), (end + dt.timedelta(days=1)).isoformat()),
         )
         rows = [{**row, "hotel_id": hotel_id} for row in cursor.fetchall()]
     except Exception as exc:
         return [], {**diagnostic, "status": "error", "error_type": type(exc).__name__}
     return rows, {
-        **diagnostic, "status": "ok", "rows": len(rows), "hotel_filter_applied": True,
+        **diagnostic, "status": "ok", "rows": sum(int(row["review_count"]) for row in rows),
+        "grouped_rows": len(rows), "hotel_filter_applied": True,
     }
 
 
-def attach_recent_reviews(result: dict[str, Any], data: dict[str, Any]) -> None:
-    item = next((row for row in (result.get("visual_diagnosis") or {}).get("items", [])
+def _item(result: dict[str, Any]) -> dict[str, Any] | None:
+    return next((row for row in (result.get("visual_diagnosis") or {}).get("items", [])
                  if int(row.get("standard_item_id") or 0) == 13), None)
+
+
+def _remove_yesterday(item: dict[str, Any]) -> None:
+    item["fields"] = [field for field in item.get("fields", [])
+                      if field.get("label") != "昨日新增点评数"]
+    for key in ("yesterday_review_date", "yesterday_new_review_count", "recent_reviews"):
+        item.pop(key, None)
+    item["note"] = re.sub(r"昨日新增点评数[^。]*(?:。|$)", "", item.get("note") or "").strip()
+
+
+def _channel(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if "大众点评" in text or "dianping" in text:
+        return "dianping"
+    if "美团" in text or "meituan" in text:
+        return "meituan"
+    return "other"
+
+
+def attach_recent_reviews(result: dict[str, Any], data: dict[str, Any]) -> None:
+    item = _item(result)
     if item is None:
         return
+    _remove_yesterday(item)
     start, end = _window()
     diagnostic = next((source.get("tables", {}).get(DIAGNOSTIC)
                        for source in data.get("source_diagnostics", [])
                        if source.get("tables", {}).get(DIAGNOSTIC)), {})
     start_day = diagnostic.get("period_start") or start.isoformat()
     end_day = diagnostic.get("period_end") or end.isoformat()
-    rows = []
-    for row in (data.get("sections") or {}).get(SECTION, []):
-        if str(row.get("hotel_id") or "") != str(data.get("hotel_id") or ""):
-            continue
-        day = str(row.get("review_time") or "")[:10]
-        if start_day <= day <= end_day:
-            rows.append({field: row.get(field) for field in FIELDS})
-    rows.sort(key=lambda row: str(row.get("review_time") or ""), reverse=True)
-    item["recent_reviews"] = {
-        "period_start": start_day, "period_end": end_day,
-        "period_days": 15, "includes_today": True,
-        "data_status": diagnostic.get("status") or "not_integrated", "rows": rows,
+    points = {}
+    if diagnostic.get("status") == "ok":
+        first = dt.date.fromisoformat(start_day)
+        for offset in range(15):
+            day = (first + dt.timedelta(days=offset)).isoformat()
+            points[day] = {"review_date": day, "total": 0, "meituan": 0, "dianping": 0, "other": 0}
+        for row in (data.get("sections") or {}).get(SECTION, []):
+            if not data.get("hotel_id") or str(row.get("hotel_id")) != str(data["hotel_id"]):
+                continue
+            point = points.get(str(row.get("review_date") or "")[:10])
+            if point is not None:
+                count = int(row.get("review_count") or 0)
+                point[_channel(row.get("channel_source"))] += count
+                point["total"] += count
+    item["review_trend"] = {
+        "period_start": start_day, "period_end": end_day, "period_days": 15,
+        "includes_today": True, "data_status": diagnostic.get("status") or "not_integrated",
+        "daily_points": list(points.values()),
     }
 
 
 def _e(value: Any) -> str:
-    return html.escape("—" if value is None or value == "" else str(value), quote=True)
+    return html.escape(str(value), quote=True)
 
 
-def _reply(value: Any) -> str:
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "已回复"}:
-        return "已回复"
-    if text in {"0", "false", "no", "未回复"}:
-        return "未回复"
-    return "未知"
+def _plot(points: list[dict[str, Any]]) -> str:
+    top, bottom, left, right = 32, 248, 52, 888
+    step = max(1, math.ceil(max(point["total"] for point in points) / 4))
+    maximum = step * 4
+    x = lambda index: left + (right - left) * index / (len(points) - 1)
+    y = lambda value: bottom - (bottom - top) * value / maximum
+    parts = ["<svg viewBox='0 0 920 300' role='img' aria-labelledby='review-trend-title review-trend-desc'>",
+             "<title id='review-trend-title'>近15天每日新增评论数</title>",
+             "<desc id='review-trend-desc'>按评论发布时间逐日统计，包含合计、美团和大众点评；悬停或聚焦数据点查看日期和条数。</desc>",
+             f"<rect x='{x(14)-22:.1f}' y='{top}' width='44' height='{bottom-top}' fill='#edf5ef'/>"]
+    for tick in range(5):
+        value = tick * step
+        parts.append(f"<line x1='{left}' y1='{y(value):.1f}' x2='{right}' y2='{y(value):.1f}' stroke='#e2ebe5'/>")
+        parts.append(f"<text x='{left-12}' y='{y(value)+4:.1f}' text-anchor='end'>{value}</text>")
+    for index, point in enumerate(points):
+        label = point["review_date"][5:]
+        parts.append(f"<text x='{x(index):.1f}' y='274' text-anchor='middle'>{_e(label)}</text>")
+    series = list(SERIES)
+    if any(point["other"] for point in points):
+        series.append(("other", "其他渠道", "#8668a0"))
+    for key, label, color in reversed(series):
+        coordinates = " ".join(f"{x(i):.1f},{y(point[key]):.1f}" for i, point in enumerate(points))
+        parts.append(f"<polyline points='{coordinates}' fill='none' stroke='{color}' stroke-width='{3 if key == 'total' else 2}'/>")
+        for index, point in enumerate(points):
+            tip = _e(f"{point['review_date']} · {label}：{point[key]}条")
+            parts.append(f"<circle cx='{x(index):.1f}' cy='{y(point[key]):.1f}' r='{4 if key == 'total' else 3}' fill='{color}' tabindex='0' aria-label='{tip}'><title>{tip}</title></circle>")
+    return "".join(parts) + "</svg>"
 
 
-def _content(value: Any) -> str:
-    text = "" if value is None else str(value)
-    if len(text) <= 120 and text.count("\n") <= 2:
-        return _e(value)
-    preview = " ".join(text.split())[:120]
-    return (f"<details><summary>{_e(preview)}… <span>展开／收起全文</span></summary>"
-            f"<div>{_e(text)}</div></details>")
-
-
-def _table(payload: dict[str, Any]) -> str:
-    rows = payload.get("rows") or []
-    start, end = payload.get("period_start"), payload.get("period_end")
-    body = []
-    for index, row in enumerate(rows):
-        values = [
-            row.get("channel_source"), row.get("reviewer_name_masked"),
-            row.get("review_score"), row.get("review_content"),
-            str(row.get("review_time") or "").replace("T", " "),
-            _reply(row.get("is_replied")),
-        ]
-        cells = [f"<td>{_content(value) if col == 3 else _e(value)}</td>"
-                 for col, value in enumerate(values)]
-        hidden = " hidden" if index >= PAGE_SIZE else ""
-        body.append(f"<tr data-review-row{hidden}>" + "".join(cells) + "</tr>")
-    if not body:
-        message = ("近15天暂无评论。" if payload.get("data_status") == "ok"
-                   else "评论明细暂未取得，请检查数据来源。")
-        body.append(f"<tr><td colspan='6'>{message}</td></tr>")
-    headers = ("渠道", "用户名（脱敏）", "评分", "评论内容", "评论时间", "是否已回复")
-    pages = max(1, (len(rows) + PAGE_SIZE - 1) // PAGE_SIZE)
-    controls = (
-        "<nav class='review-pages' aria-label='评论分页'>"
-        "<button type='button' data-review-prev disabled>上一页</button>"
-        f"<span data-review-page role='status' aria-live='polite'>第 1 / {pages} 页 · 共 {len(rows)} 条 · 每页 {PAGE_SIZE} 条</span>"
-        f"<button type='button' data-review-next{' disabled' if pages == 1 else ''}>下一页</button></nav>"
-    )
-    return (
-        f"<section id='meituan-recent-reviews' data-page-size='{PAGE_SIZE}'><h4>近15天评论明细（含当日）</h4>"
-        f"<p>{_e(start)} 至 {_e(end)} · 共 {len(rows)} 条 · 按评论时间从新到旧展示</p>"
-        "<div class='table-scroll'><table><thead><tr>"
-        + "".join(f"<th>{name}</th>" for name in headers)
-        + "</tr></thead><tbody>" + "".join(body) + "</tbody></table></div>"
-        + controls + "<noscript><style>#meituan-recent-reviews tr[hidden]{display:table-row!important}"
-        "#meituan-recent-reviews .review-pages{display:none}</style></noscript></section>"
-    )
+def _chart(payload: dict[str, Any]) -> str:
+    points = payload.get("daily_points") or []
+    heading = ("<section id='meituan-review-trend'><h4>近15天每日新增评论趋势</h4>"
+               f"<p>{_e(payload['period_start'])} 至 {_e(payload['period_end'])}（含当日） · 按评论发布时间统计</p>")
+    if not points:
+        return heading + "<p>评论趋势暂未取得，请检查数据来源。</p></section>"
+    series = list(SERIES) + ([("other", "其他渠道", "#8668a0")] if any(p["other"] for p in points) else [])
+    legend = "".join(f"<span><i style='--line:{color}'></i>{label} {_e(sum(p[key] for p in points))}条</span>"
+                     for key, label, color in series)
+    return (heading + f"<div class='review-legend'>{legend}</div><div class='review-plot'>"
+            + _plot(points) + "</div><p class='review-note'>纵轴：新增评论数（条）；横轴：评论日期。"
+            "无评论日期显示0；右侧浅色区域为当日，当日尚未结束，数据截至报告生成时。"
+            "悬停或聚焦数据点可查看具体条数；本图不参与口碑评分。</p></section>")
 
 
 def patch_recent_reviews_html(document: str, result: dict[str, Any]) -> str:
-    item = next((row for row in (result.get("visual_diagnosis") or {}).get("items", [])
-                 if int(row.get("standard_item_id") or 0) == 13), {})
-    payload = item.get("recent_reviews")
+    from marketing_diagnosis.reporting_v32 import _reputation_card
+
+    item = _item(result)
+    if item is None:
+        return document
+    _remove_yesterday(item)
+    payload = item.get("review_trend")
     if not payload:
         return document
-    document = _DETAIL.sub("", document)
-    document = re.sub(r"<style id='MEITUAN_RECENT_REVIEWS_STYLE'>.*?</style>", "", document, flags=re.S)
+    # Remove the superseded detail table, pagination assets and earlier chart style.
+    document = re.sub(r"<section id='(?:meituan-recent-reviews|meituan-review-trend)'[^>]*>.*?</section>", "", document, flags=re.S)
+    document = re.sub(r"<style id='(?:MEITUAN_RECENT_REVIEWS_STYLE|MEITUAN_REVIEW_TREND_STYLE)'>.*?</style>", "", document, flags=re.S)
     document = re.sub(r"<script id='MEITUAN_RECENT_REVIEWS_SCRIPT'>.*?</script>", "", document, flags=re.S)
-    document, count = _CARD.subn(
-        lambda match: match.group(0).replace("</article>", _table(payload) + "</article>" + SCRIPT),
-        document, count=1,
-    )
-    if count and "id='MEITUAN_RECENT_REVIEWS_STYLE'" not in document:
-        document = document.replace("</head>", STYLE + "</head>", 1)
-    return document
+    card = _reputation_card(item)
+    card = card.replace("展示美团与大众点评评分、点评数、未回复数，以及按点评时间统计的昨日新增点评数。",
+                        "展示美团与大众点评评分、点评数、未回复数及近15天每日新增评论趋势。")
+    card = re.sub(r"(<div class='title-meta-item title-period'><small>统计周期</small><strong>).*?(</strong>)",
+                  r"\g<1>评分最新快照 / 评论近15天\2", card, count=1)
+    card = card.replace("</article>", _chart(payload) + "</article>")
+    document, count = _CARD.subn(lambda _: card, document, count=1)
+    return document.replace("</head>", STYLE + "</head>", 1) if count else document

@@ -21,7 +21,8 @@ STYLE = """<style id='MEITUAN_REVIEW_TREND_STYLE'>
 #meituan-review-trend .review-plot{overflow-x:auto;border:1px solid #e4ebe7;border-radius:12px;background:#fbfdfc}
 #meituan-review-trend svg{display:block;width:100%;min-width:720px;height:auto}
 #meituan-review-trend svg text{font-family:inherit;fill:#64786e;font-size:12px}
-#meituan-review-trend circle{cursor:help;stroke:#fff;stroke-width:1.5}
+#meituan-review-trend circle{cursor:help;stroke:#fff;stroke-width:1.5;transition:r .18s ease,filter .18s ease}
+#meituan-review-trend circle:hover,#meituan-review-trend circle:focus{r:6;filter:drop-shadow(0 2px 4px rgba(8,127,100,.3))}
 #meituan-review-trend circle:focus{outline:2px solid #174e3d}
 #meituan-review-trend .review-note{margin-top:12px}
 </style>"""

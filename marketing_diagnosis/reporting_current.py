@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -26,27 +27,44 @@ from marketing_diagnosis.reporting_runtime_v52 import (
 )
 
 
-def _business_travel_copy(document: str) -> str:
-    return document.replace("展示开通状态和参与房型数。", "展示参与状态、近30天订单和成交金额。")
+def _compact_business_travel(document: str) -> str:
+    def compact(match: re.Match) -> str:
+        card = match.group(0)
+        if "ctrip-metric-v55" not in card:
+            return card
+        card = re.sub(r"(<div class='card-title'><h3>.*?</h3>)<p>.*?</p>", r"\1", card, flags=re.S)
+        for pattern in (
+            r"<div class='title-meta-item title-period'>.*?</div>",
+            r"<span class='status-badge [^']*'>.*?</span>",
+            r"<div class='ctrip-source-v55'>.*?</div>",
+            r"<div class='notice'>.*?</div>",
+        ):
+            card = re.sub(pattern, "", card, flags=re.S)
+        return re.sub(
+            r"(<div class='ctrip-metric-v55'>.*?<strong\b[^>]*>.*?</strong>)\s*<span>.*?</span>",
+            r"\1", card, flags=re.S,
+        )
+
+    return re.sub(r"<article\b[^>]*\bid='(?:ctrip-)?rule-16'[^>]*>.*?</article>", compact, document, flags=re.S)
 
 
 def build_ctrip_html(result: dict[str, Any]) -> str:
     return patch_manual_supplements(
-        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_business_travel_copy(_build_ctrip_html(result)), result), result)), result),
+        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_ctrip_html(result)), result), result)), result),
         result,
     )
 
 
 def build_dual_channel_html(result: dict[str, Any]) -> str:
     return patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
-        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_business_travel_copy(_build_dual_channel_html(result)), result), result)), result),
+        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_dual_channel_html(result)), result), result)), result),
         result,
     ), result), result)
 
 
 def build_html(result: dict[str, Any]) -> str:
     return patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
-        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_business_travel_copy(_build_html(result)), result), result)), result),
+        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_html(result)), result), result)), result),
         result,
     ), result), result)
 

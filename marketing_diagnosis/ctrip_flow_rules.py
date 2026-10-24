@@ -120,9 +120,9 @@ def _patch_business_travel(items: dict[str, Any], sections: dict[str, Any]) -> N
     })
     item["source"] = "ctrip_ota_promotion_activity / ctrip_ota_promotion_activity_performance / ctrip_ota_promotion_status"
     item["fields"] = [
-        {"label": "参与状态", "value": "已参与" if joined else "未参与", "note": "按活动名称“商旅专享”匹配"},
-        {"label": "近30天订单", "value": performance.get("campaign_quantity") if joined else 0, "note": "同名活动效果中的订单量"},
-        {"label": "成交金额", "value": performance.get("campaign_gmv") if joined else 0, "note": "同名活动效果中的成交金额"},
+        {"label": "参与状态", "value": "已参与" if joined else "未参与", "note": ""},
+        {"label": "近30天订单", "value": performance.get("campaign_quantity") if joined else 0, "note": ""},
+        {"label": "成交金额", "value": performance.get("campaign_gmv") if joined else 0, "note": ""},
     ]
     item["note"] = (
         "在最新活动列表中匹配到“商旅专享”，判为已参与；订单及金额来自同名活动效果。"

@@ -26,23 +26,27 @@ from marketing_diagnosis.reporting_runtime_v52 import (
 )
 
 
+def _business_travel_copy(document: str) -> str:
+    return document.replace("展示开通状态和参与房型数。", "展示参与状态、近30天订单和成交金额。")
+
+
 def build_ctrip_html(result: dict[str, Any]) -> str:
     return patch_manual_supplements(
-        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_build_ctrip_html(result), result), result)), result),
+        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_business_travel_copy(_build_ctrip_html(result)), result), result)), result),
         result,
     )
 
 
 def build_dual_channel_html(result: dict[str, Any]) -> str:
     return patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
-        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_build_dual_channel_html(result), result), result)), result),
+        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_business_travel_copy(_build_dual_channel_html(result)), result), result)), result),
         result,
     ), result), result)
 
 
 def build_html(result: dict[str, Any]) -> str:
     return patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
-        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_build_html(result), result), result)), result),
+        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_business_travel_copy(_build_html(result)), result), result)), result),
         result,
     ), result), result)
 

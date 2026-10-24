@@ -5,6 +5,7 @@ from typing import Any
 from marketing_diagnosis.ctrip_flow_rank_rules import build_flow_item
 from marketing_diagnosis.ctrip_rights_data import build_rights_item
 from marketing_diagnosis.ctrip_score_alignment import align_ctrip_scores
+from marketing_diagnosis.ctrip_configuration_v63 import _business_item
 from marketing_diagnosis.meituan_market_share import patch_market_share
 from marketing_diagnosis.meituan_recent_reviews import attach_recent_reviews
 from marketing_diagnosis.rules_v5 import _refresh_ctrip_summary
@@ -12,7 +13,6 @@ from marketing_diagnosis.rules_v5 import process as upstream_process
 
 
 _INACTIVE_POINTS_STATES = {"未报名", "未参与"}
-_NOT_JOINED_STATES = {"not_joined", "not_jioned"}
 
 
 def _number(value: Any) -> float | None:
@@ -103,30 +103,33 @@ def _zero_inactive_points_metrics(items: dict[str, Any]) -> None:
     item["data_status"] = "success"
 
 
-def _normalize_business_travel_not_joined(items: dict[str, Any], sections: dict[str, Any]) -> None:
-    """Present an explicit NOT_JOINED state as enrollment, not a closed switch."""
-    rows = sections.get("ctrip_promotion_status") or []
-    row = next(
-        (
-            candidate
-            for candidate in rows
-            if isinstance(candidate, dict)
-            and str(candidate.get("activity_code") or "").strip().lower() == "business_travel_price"
-            and str(candidate.get("status") or "").strip().lower() in _NOT_JOINED_STATES
-        ),
-        None,
-    )
-    item = items.get("16") or items.get(16)
-    if row is None or not isinstance(item, dict):
-        return
-
-    item["item_score"] = 0.0
-    item["data_status"] = "success"
+def _patch_business_travel(items: dict[str, Any], sections: dict[str, Any]) -> None:
+    """Match participation by activity name; retain the existing two-point rule."""
+    activity = next((row for row in sections.get("ctrip_promotion_activity") or []
+                     if isinstance(row, dict) and str(row.get("activity_name") or "").strip() == "商旅专享"), None)
+    status = next((row for row in sections.get("ctrip_promotion_status") or []
+                   if isinstance(row, dict) and str(row.get("activity_code") or "").strip().lower() == "business_travel_price"), {})
+    performance = next((row for row in sections.get("ctrip_promotion_activity_performance") or []
+                        if isinstance(row, dict) and str(row.get("campaign_name") or "").strip() == "商旅专享"), {})
+    joined = activity is not None
+    item = _business_item({
+        "status": "JOINED" if joined else "NOT_JOINED", "enabled": int(joined),
+        "room_type_count": status.get("room_type_count"),
+        "orders_30d": performance.get("campaign_quantity"),
+        "metric_value": performance.get("campaign_gmv"),
+    })
+    item["source"] = "ctrip_ota_promotion_activity / ctrip_ota_promotion_activity_performance / ctrip_ota_promotion_status"
     item["fields"] = [
-        {"label": "报名状态", "value": "未报名", "note": ""},
-        {"label": "参与房型", "value": 0, "note": ""},
+        {"label": "参与状态", "value": "已参与" if joined else "未参与", "note": "按活动名称“商旅专享”匹配"},
+        {"label": "近30天订单", "value": performance.get("campaign_quantity") if joined else 0, "note": "同名活动效果中的订单量"},
+        {"label": "成交金额", "value": performance.get("campaign_gmv") if joined else 0, "note": "同名活动效果中的成交金额"},
     ]
-    item["note"] = "未报名得0分。"
+    item["note"] = (
+        "在最新活动列表中匹配到“商旅专享”，判为已参与；订单及金额来自同名活动效果。"
+        "本项满分2分，订单量及成交金额仅作展示。"
+        if joined else "最新活动列表未匹配到“商旅专享”，本项按未参与计0分。"
+    )
+    items["16"] = item
 
 
 def process(data: dict[str, Any]) -> dict[str, Any]:
@@ -152,7 +155,7 @@ def process(data: dict[str, Any]) -> dict[str, Any]:
 
     _normalize_points_alliance_fields(items)
     _zero_inactive_points_metrics(items)
-    _normalize_business_travel_not_joined(items, sections)
+    _patch_business_travel(items, sections)
     _fallback_information_completeness(items, sections)
     align_ctrip_scores(result, sections)
     _refresh_ctrip_summary(result)

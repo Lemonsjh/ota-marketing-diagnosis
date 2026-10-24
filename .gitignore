@@ -19,3 +19,8 @@ public/
 
 # Local preview reports and their JSON/Markdown inputs.
 preview/
+
+# Local inspection output and obsolete script backups.
+/_inspect_report.html
+/checks.txt
+*.bak-*

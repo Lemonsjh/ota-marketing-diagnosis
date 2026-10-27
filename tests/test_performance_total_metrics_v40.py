@@ -86,6 +86,101 @@ class PerformanceTotalMetricsTests(unittest.TestCase):
 
         self.assertEqual(result["items"][0]["item_score"], 0)
 
+    def _monthly_item(self, rows):
+        result = self._result()
+        patch_performance_yoy(result, {"hotel_monthly": rows})
+        return result["items"][0]
+
+    def test_jy03_latest_month_uses_prior_year_month_for_display_and_score(self):
+        item = self._monthly_item([
+            {"period_month": "2026-09", "room_revenue": 70},
+            {"period_month": "2025-09", "room_revenue": 100},
+            {"period_month": "2026-10", "room_revenue": 195900.81,
+             "adr": 191.50, "occupancy_rate": 78.27, "revpar": 122.59},
+            {"period_month": "2025-10", "room_revenue": 83115.90,
+             "adr": 183.48, "occupancy_rate": 91.52, "revpar": 125.55},
+        ])
+        period = item["trend_periods"][-1]
+        self.assertEqual(period["current_range"], "2026/10")
+        self.assertEqual(period["previous_range"], "2025/10")
+        for metric, previous in zip(period["metrics"], [83115.90, 183.48, 91.52, 125.55]):
+            self.assertEqual(metric["previous"], previous)
+            self.assertAlmostEqual(metric["yoy"], (metric["current"] - previous) / previous)
+        self.assertEqual(item["fields"][1]["value"], "2026-10")
+        self.assertEqual(item["records"][0]["previous_value_month"], 83115.90)
+        self.assertEqual(item["item_score"], 10)
+        self.assertNotIn("仅作展示", item["scoring_note"])
+
+    def test_jy03_keeps_latest_snapshot_for_each_month(self):
+        item = self._monthly_item([
+            {"period_month": "2026-10", "room_revenue": 150, "snapshot_time": "2026-10-27 10:00:00"},
+            {"period_month": "2026-10", "room_revenue": 50, "snapshot_time": "2026-10-26 10:00:00"},
+            {"period_month": "2025-10", "room_revenue": 100},
+        ])
+        self.assertEqual(item["records"][0]["value_month"], 150)
+        self.assertEqual(item["item_score"], 10)
+
+    def test_jy03_missing_prior_month_keeps_previous_scoring_month(self):
+        item = self._monthly_item([
+            {"period_month": "2026-10", "room_revenue": 150},
+            {"period_month": "2026-09", "room_revenue": 70},
+            {"period_month": "2025-09", "room_revenue": 100},
+        ])
+        self.assertIsNone(item["trend_periods"][-1]["metrics"][0]["previous"])
+        self.assertEqual(item["fields"][1]["value"], "2026-09")
+        self.assertEqual(item["item_score"], 0)
+
+    def test_jy03_missing_or_zero_prior_revenue_does_not_invent_yoy(self):
+        for prior in (None, 0):
+            with self.subTest(prior=prior):
+                item = self._monthly_item([
+                    {"period_month": "2026-10", "room_revenue": 150},
+                    {"period_month": "2025-10", "room_revenue": prior},
+                ])
+                self.assertIsNone(item["trend_periods"][-1]["metrics"][0]["yoy"])
+                self.assertIsNone(item["item_score"])
+
+    def test_jy03_zero_current_revenue_remains_full_decline(self):
+        item = self._monthly_item([
+            {"period_month": "2026-10", "room_revenue": 0},
+            {"period_month": "2025-10", "room_revenue": 100},
+        ])
+        self.assertEqual(item["records"][0]["yoy_month"], -1)
+        self.assertEqual(item["item_score"], 0)
+
+    def test_jl02_still_takes_priority_over_jy03(self):
+        result = self._result()
+        patch_performance_yoy(result, {
+            "hotel_performance_daily": [
+                self._row("2026-10-27", "房费", 70, 70, 70),
+                self._row("2025-10-27", "房费", 100, 100, 100),
+            ],
+            "hotel_monthly": [{"period_month": "2026-10", "room_revenue": 150},
+                              {"period_month": "2025-10", "room_revenue": 100}],
+        })
+        self.assertEqual(result["items"][0]["item_score"], 0)
+        self.assertEqual(result["items"][0]["records"][6]["value_month"], 70)
+
+    def test_current_pipeline_applies_jy03_comparison_to_both_channels(self):
+        from marketing_diagnosis.latest import build_html, process
+
+        result = process({"hotel_id": "test", "platform": "multi", "sections": {
+            "hotel_monthly": [
+                {"period_month": "2026-10", "room_revenue": 195900.81},
+                {"period_month": "2025-10", "room_revenue": 83115.90},
+            ],
+        }})
+        visual = result["visual_diagnosis"]
+        meituan = next(item for item in visual["items"] if item["standard_item_id"] == 1)
+        ctrip = result["ctrip_items"]["1"]
+        for item in (meituan, ctrip):
+            self.assertEqual(item["item_score"], 10)
+            self.assertEqual(item["records"][0]["previous_value_month"], 83115.90)
+        html = build_html(result)
+        self.assertIn("83,115.90", html)
+        self.assertNotIn("本月，无YOY", html)
+        self.assertNotIn("本月数据仅作展示", html)
+
     def test_report_uses_daily_monthly_yearly_wording(self):
         item = self._result()["items"][0]
         item["records"] = [

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the 22 courses authorized on 2026-10-28 as pure Markdown."""
+"""Export shared Markdown courses without management metadata."""
 import argparse
 import json
 import sys

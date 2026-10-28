@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from marketing_diagnosis import shared_knowledge as kb
-from marketing_diagnosis.knowledge_corpus import APPROVED_COURSES, export_courses, load_courses
+from marketing_diagnosis.knowledge_corpus import export_courses, load_courses
 from marketing_diagnosis.knowledge_delivery import finalize_answer
 
 
@@ -23,7 +23,8 @@ class SharedKnowledgeTests(unittest.TestCase):
         base = Path(self.tmp.name)
         self.source, self.root, self.db = base / "drafts", base / "knowledge", base / "auth.sqlite"
         self.source.mkdir()
-        for code in sorted(APPROVED_COURSES):
+        codes = ["BG-001", "MK-001", "RM-001"] + [f"EC-{n:03d}" for n in range(1, 19)] + [f"OP-{n:03d}" for n in range(1, 22)]
+        for code in codes:
             self.write_course(code)
         self.write_course("OP-018", issues=1)
         export_courses(self.source, self.root)
@@ -62,23 +63,30 @@ class SharedKnowledgeTests(unittest.TestCase):
                   "snippet": "伪造的工具摘要不应被使用"}
         return {**result, **changes}
 
-    def test_export_exact_approved_set_and_remove_management_fields(self):
+    def test_export_all_shared_courses_including_review_flags(self):
         docs = load_courses(self.root)
-        self.assertEqual(len(docs), 22)
-        self.assertFalse((self.root / "memory/OP-018.md").exists())
+        self.assertEqual(len(docs), 42)
+        self.assertTrue((self.root / "memory/OP-018.md").exists())
         body = (self.root / "memory/OP-008.md").read_text(encoding="utf-8")
         self.assertNotIn("publication_status", body)
         self.assertTrue(body.startswith("# 课程"))
         self.assertIn('publication_status: "draft"', (self.source / "OP-008.md").read_text(encoding="utf-8"))
 
-    def test_export_rejects_missing_flagged_or_duplicate_approved_course(self):
+    def test_export_keeps_flagged_courses_and_rejects_duplicate_ids(self):
         self.write_course("OP-008", issues=1)
-        with self.assertRaises(ValueError):
-            export_courses(self.source, self.root.parent / "blocked")
+        self.assertEqual(export_courses(self.source, self.root.parent / "flagged")["documents"], 42)
         self.write_course("OP-008")
         (self.source / "duplicate.md").write_bytes((self.source / "OP-008.md").read_bytes())
         with self.assertRaises(ValueError):
             export_courses(self.source, self.root.parent / "duplicate")
+
+    def test_export_does_not_include_hotel_private_material(self):
+        self.write_course("XX-001")
+        private = self.source / "XX-001.md"
+        private.write_text(private.read_text(encoding="utf-8").replace('scope: "shared"', 'scope: "hotel_private"'), encoding="utf-8")
+        target = self.root.parent / "shared_only"
+        self.assertEqual(export_courses(self.source, target)["documents"], 42)
+        self.assertFalse((target / "memory/XX-001.md").exists())
 
     def test_auth_happens_before_retrieval_and_missing_db_is_not_created(self):
         with patch.object(kb, "_native_search") as native:
@@ -114,7 +122,7 @@ class SharedKnowledgeTests(unittest.TestCase):
         self.assertNotIn("path", material)
 
     def test_unapproved_path_traversal_and_low_score_are_not_returned(self):
-        hits = [self.hit(path="../../auth-profiles.json"), self.hit(path="memory/OP-018.md"), self.hit(score=0.1)]
+        hits = [self.hit(path="../../auth-profiles.json"), self.hit(path="memory/OP-999.md"), self.hit(score=0.1)]
         with patch.object(kb, "_native_search", return_value=hits):
             self.assertEqual(self.search()["status"], "no_match")
 
@@ -141,7 +149,7 @@ class SharedKnowledgeTests(unittest.TestCase):
     def test_fixed_directory_can_be_updated_without_a_new_release(self):
         source = self.source / "OP-008.md"
         source.write_text(source.read_text(encoding="utf-8") + "更新后的课程内容。\n", encoding="utf-8")
-        self.assertEqual(export_courses(self.source, self.root)["documents"], 22)
+        self.assertEqual(export_courses(self.source, self.root)["documents"], 42)
         self.assertIn("更新后的课程内容", (self.root / "memory/OP-008.md").read_text(encoding="utf-8"))
         self.assertFalse((self.root / "READY.json").exists())
         self.assertFalse((self.root / "release.json").exists())
@@ -152,10 +160,10 @@ class SharedKnowledgeTests(unittest.TestCase):
         listing = self.root / "courses.json"
         listing.write_text(json.dumps(json.loads(listing.read_text()) + ["EC-099"]))
         docs = load_courses(self.root)
-        self.assertEqual(len(docs), 23)
+        self.assertEqual(len(docs), 43)
         with closing(sqlite3.connect(self.root / f"state/memory/{kb.PROFILE}.sqlite")) as con, con:
             con.execute("INSERT INTO files VALUES(?,?,'memory')", ("memory/EC-099.md", docs["memory/EC-099.md"]["sha256"]))
-        self.assertEqual(len(kb._knowledge_documents(self.root)), 23)
+        self.assertEqual(len(kb._knowledge_documents(self.root)), 43)
 
     def test_ticket_cannot_cross_user_or_hotel_and_expires(self):
         with patch.object(kb, "_native_search", return_value=[self.hit()]):

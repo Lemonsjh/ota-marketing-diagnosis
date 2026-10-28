@@ -6,13 +6,6 @@ import json
 import re
 from pathlib import Path
 
-APPROVED_COURSES = frozenset("""
-BG-001 EC-002 EC-005 EC-007 EC-010 EC-012 EC-013 EC-014 EC-017 EC-018
-MK-001 OP-003 OP-004 OP-006 OP-008 OP-009 OP-011 OP-012 OP-013 OP-014
-OP-019 RM-001
-""".split())
-
-
 def digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -32,20 +25,20 @@ def course_parts(text: str) -> tuple[dict, str]:
 
 
 def export_courses(source: Path, target: Path) -> dict:
-    """Write the approved courses to a fixed directory; leave drafts untouched."""
+    """Export all shared courses; review notes do not exclude whole documents."""
     courses = {}
     for path in sorted(source.rglob("*.md")):
         meta, body = course_parts(path.read_text(encoding="utf-8"))
         code = meta.get("doc_id")
-        if code not in APPROVED_COURSES:
+        if meta.get("scope") != "shared":
             continue
-        if code in courses or meta.get("scope") != "shared" or meta.get("source_review_issue_count") != 0:
-            raise ValueError("approved course is duplicated or requires review")
+        if not isinstance(code, str) or not re.fullmatch(r"[A-Z]{2}-\d{3}", code) or code in courses:
+            raise ValueError("invalid or duplicated course ID")
         if not body.startswith("# ") or not meta.get("title"):
             raise ValueError("course title or body is missing")
         courses[code] = (meta, body)
-    if set(courses) != APPROVED_COURSES:
-        raise ValueError("approved course set is incomplete")
+    if not courses:
+        raise ValueError("no shared courses found")
     directory = target / "memory"
     directory.mkdir(parents=True, exist_ok=True)
     for code, (_, body) in sorted(courses.items()):

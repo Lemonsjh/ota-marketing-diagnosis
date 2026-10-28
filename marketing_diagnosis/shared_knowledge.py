@@ -33,7 +33,11 @@ def is_knowledge_question(text: str) -> bool:
         return True
     if re.search(r"S14|诊断报告|生成报告|经营报告|全面诊断|诊断一下|数据库|Excel|房型名称[：:]", text, re.I):
         return False
-    if re.search(r"(?:今天|今日|昨天|昨日|本月|上月|实时|近\d+天|过去\d+天).*(?:本店|我店|我们|多少|订单|经营|流量|浏览|转化|出租率|房价)", text):
+    if re.search(r"(?:今天|今日|昨天|昨日|本月|上月|当前|现在|实时|近\d+天|过去\d+天).*(?:本店|我店|我们|多少|订单|经营|流量|浏览|转化|出租率|房价)", text):
+        return False
+    own_hotel = re.search(r"本店|我店|我们(?:酒店)?|这家酒店", text)
+    general_method = re.search(r"一般|通用|方法|原理|课程", text)
+    if own_hotel and not general_method and re.search(r"为什么|原因|多少|几单|是不是|是否|(?:房价|订单|浏览|转化率).{0,6}(?:高|低|多|少)", text):
         return False
     if re.search(r"(?:执行|恢复|取消|创建|写入|删除).*(?:调价|推广|任务|订单)|(?:直接|帮我).*(?:涨价|降价|改价)", text):
         return False

@@ -168,7 +168,7 @@ class SharedKnowledgeTests(unittest.TestCase):
                               chat_id="oc_test_a", sender_id="ou_test_reader"))
 
     def test_question_routing_separates_methods_reports_facts_and_execution(self):
-        for query in ["酒店动态定价怎么做？", "浏览多但订单少，应该先排查什么？", "什么是RevPAR？", "如何分析酒店转化率？"]:
+        for query in ["酒店动态定价怎么做？", "浏览多但订单少，应该先排查什么？", "什么是RevPAR？", "如何分析酒店转化率？", "我们酒店怎么做会员运营？", "本店浏览多但订单少，一般怎么排查？"]:
             self.assertTrue(kb.is_knowledge_question(query), query)
-        for query in ["帮我分析酒店经营情况", "生成诊断报告", "Excel模板", "本店今天订单多少？", "为什么昨天我店订单少", "帮我直接降价", "房型名称：标准大床房"]:
+        for query in ["帮我分析酒店经营情况", "生成诊断报告", "Excel模板", "本店今天订单多少？", "为什么昨天我店订单少", "当前我店房价为什么偏高？", "为什么我们酒店总是订单少？", "帮我直接降价", "房型名称：标准大床房"]:
             self.assertFalse(kb.is_knowledge_question(query), query)

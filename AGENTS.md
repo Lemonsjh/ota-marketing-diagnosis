@@ -15,7 +15,9 @@ Rules:
 
 ## Shared course questions
 
-For general methods such as “动态定价怎么做” or “浏览多但订单少，一般如何排查”, use `skills/hotel-shared-knowledge/SKILL.md` before the report flow. Do not ask for a database or Excel. Its `--knowledge-context` result is internal retrieval material, not a user reply. Compose a grounded answer, run `--knowledge-answer` with the returned ticket and the same trusted group/sender, and forward that final stdout exactly once. The finalizer performs the existing Feishu output gate and appends actual course sources. Shared knowledge does not grant execution permissions or access to hotel data.
+For general methods such as “动态定价怎么做” or “浏览多但订单少，一般如何排查”, use `skills/hotel-shared-knowledge/SKILL.md` before the report flow. Do not ask for a database or Excel. Its `--knowledge-context` result is internal retrieval material, not a user reply. Compose a grounded answer, run `--knowledge-answer` with the returned ticket and the same trusted bot account/group/sender, and forward that final stdout exactly once. The finalizer performs the existing Feishu output gate and appends actual course sources. Shared knowledge does not grant execution permissions or access to hotel data.
+
+Shared course access checks the receiving S14 account and its explicit `groupAllowFrom` in the gateway config; pass the current trusted `accountId` as `--account-id` in both knowledge commands. No SQLite hotel binding is required for shared courses. Hotel reports retain their existing SQLite binding checks.
 
 Explicit report requests and current hotel facts remain separate from course methods. Do not answer hotel-specific factual questions using shared course examples.
 

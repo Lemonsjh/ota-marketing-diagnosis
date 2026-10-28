@@ -36,16 +36,15 @@ class SharedKnowledgeTests(unittest.TestCase):
         with closing(sqlite3.connect(self.root / f"state/memory/{kb.PROFILE}.sqlite")) as con, con:
             con.execute("CREATE TABLE files(path TEXT, hash TEXT, source TEXT)")
             con.executemany("INSERT INTO files VALUES(?,?,'memory')", [(path, doc["sha256"]) for path, doc in load_courses(self.root).items()])
-        with closing(sqlite3.connect(self.db)) as con, con:
-            con.executescript("""
-            CREATE TABLE auth_backend_state(backend_name TEXT,status TEXT);
-            INSERT INTO auth_backend_state VALUES('feishu_active_auth','active');
-            CREATE TABLE chat_bindings(chat_id TEXT, hotel_id TEXT, chat_type TEXT, status TEXT);
-            INSERT INTO chat_bindings VALUES('oc_test_a','hotel_a','group','active');
-            INSERT INTO chat_bindings VALUES('oc_test_b','hotel_b','group','active');
-            CREATE TABLE group_chat_bindings(chat_id TEXT, hotel_id TEXT,status TEXT);
-            """)
-        self.env = patch.dict(os.environ, {"S14_KNOWLEDGE_ROOT": str(self.root)})
+        self.gateway = base / "gateway.json"
+        self.gateway_config = {"channels": {"feishu": {"enabled": True, "accounts": {
+            "s14-a": {"enabled": True, "groupPolicy": "allowlist", "groupAllowFrom": ["oc_test_a", "oc_test_b", "oc_no_hotel"]},
+            "s14-b": {"enabled": True, "groupAllowFrom": ["oc_test_a"]},
+            "chief": {"enabled": True, "groupAllowFrom": ["oc_test_a", "oc_main_only"]}}}},
+            "bindings": [{"type": "route", "agentId": "s14-operation-diagnosis",
+                          "match": {"channel": "feishu", "accountId": account}} for account in ["s14-a", "s14-b"]]}
+        self.write_gateway()
+        self.env = patch.dict(os.environ, {"S14_KNOWLEDGE_ROOT": str(self.root), "S14_GATEWAY_CONFIG": str(self.gateway)})
         self.env.start()
         self.addCleanup(self.env.stop)
 
@@ -55,8 +54,11 @@ class SharedKnowledgeTests(unittest.TestCase):
                    f'# 课程{code}\n\n## 方法与条件\n\n课程讲解应结合市场和经营条件判断。\n')
         (self.source / f"{code}.md").write_text(content, encoding="utf-8")
 
-    def search(self, chat="oc_test_a", sender="ou_test_reader"):
-        return kb.search_context("酒店动态定价怎么做？", db=self.db, chat_id=chat, sender_id=sender)
+    def write_gateway(self):
+        self.gateway.write_text(json.dumps(self.gateway_config), encoding="utf-8")
+
+    def search(self, chat="oc_test_a", sender="ou_test_reader", account="s14-a"):
+        return kb.search_context("酒店动态定价怎么做？", chat_id=chat, sender_id=sender, account_id=account)
 
     def hit(self, **changes):
         result = {"path": "memory/OP-008.md", "score": 0.55, "startLine": 5, "endLine": 5,
@@ -88,26 +90,51 @@ class SharedKnowledgeTests(unittest.TestCase):
         self.assertEqual(export_courses(self.source, target)["documents"], 42)
         self.assertFalse((target / "memory/XX-001.md").exists())
 
-    def test_auth_happens_before_retrieval_and_missing_db_is_not_created(self):
+    def test_account_allowlist_is_checked_before_retrieval(self):
         with patch.object(kb, "_native_search") as native:
-            self.assertEqual(self.search(chat="oc_unbound")["status"], "blocked")
-            missing = self.root / "missing.sqlite"
-            result = kb.search_context("酒店定价怎么做？", db=missing, chat_id="oc_test_a", sender_id="ou_test")
-            self.assertEqual(result["status"], "blocked")
-            self.assertFalse(missing.exists())
+            for identity in [dict(chat="oc_unbound"), dict(chat="oc_main_only"),
+                             dict(account="chief"), dict(account="s14-b", chat="oc_test_b"),
+                             dict(sender=""), dict(account=""), dict(chat="user:ou_reader")]:
+                self.assertEqual(self.search(**identity)["status"], "blocked", identity)
             native.assert_not_called()
 
-    def test_missing_sender_and_inactive_auth_fail_closed(self):
-        self.assertEqual(self.search(sender="")["status"], "blocked")
-        with closing(sqlite3.connect(self.db)) as con, con:
-            con.execute("UPDATE auth_backend_state SET status='inactive'")
+    def test_whitelisted_group_needs_no_sqlite_hotel_binding(self):
+        with patch.dict(os.environ, {"HOTEL_OTA_DB": str(self.db)}), patch.object(kb, "_native_search", return_value=[self.hit()]):
+            self.assertEqual(self.search(chat="oc_no_hotel")["status"], "ok")
+        self.assertFalse(self.db.exists())
+
+    def test_missing_invalid_or_disabled_gateway_config_fails_closed(self):
+        accounts = self.gateway_config["channels"]["feishu"]["accounts"]
         with patch.object(kb, "_native_search") as native:
+            for field, value in [("enabled", False), ("groupPolicy", "disabled"),
+                                 ("groupAllowFrom", "oc_test_a"), ("groupAllowFrom", ["*"])]:
+                original = accounts["s14-a"][field]
+                accounts["s14-a"][field] = value
+                self.write_gateway()
+                self.assertEqual(self.search()["status"], "blocked")
+                accounts["s14-a"][field] = original
+            self.gateway_config["channels"]["feishu"]["enabled"] = False
+            self.write_gateway()
+            self.assertEqual(self.search()["status"], "blocked")
+            self.gateway.write_text("{broken", encoding="utf-8")
+            self.assertEqual(self.search()["status"], "blocked")
+            self.gateway.rename(self.gateway.with_suffix(".held"))
             self.assertEqual(self.search()["status"], "blocked")
             native.assert_not_called()
 
+    def test_allowlist_removal_blocks_final_answer_with_valid_ticket(self):
+        with patch.object(kb, "_native_search", return_value=[self.hit()]):
+            result = self.search()
+        self.gateway_config["channels"]["feishu"]["accounts"]["s14-a"]["groupAllowFrom"] = []
+        self.write_gateway()
+        with patch("marketing_diagnosis.knowledge_delivery._gate") as gate:
+            text = finalize_answer("课程方法。", result["ticket"], chat_id="oc_test_a", sender_id="ou_test_reader", account_id="s14-a")
+            self.assertEqual(text, kb.AUTH_DENIED)
+            gate.assert_not_called()
+
     def test_help_does_not_start_retrieval(self):
         with patch.object(kb, "_native_search") as native:
-            result = kb.search_context("共享知识库", db=self.db, chat_id="oc_test_a", sender_id="ou_test_reader")
+            result = kb.search_context("共享知识库", account_id="s14-a", chat_id="oc_test_a", sender_id="ou_test_reader")
         self.assertEqual(result["status"], "help")
         native.assert_not_called()
 
@@ -165,29 +192,31 @@ class SharedKnowledgeTests(unittest.TestCase):
             con.execute("INSERT INTO files VALUES(?,?,'memory')", ("memory/EC-099.md", docs["memory/EC-099.md"]["sha256"]))
         self.assertEqual(len(kb._knowledge_documents(self.root)), 43)
 
-    def test_ticket_cannot_cross_user_or_hotel_and_expires(self):
+    def test_ticket_cannot_cross_user_group_or_account_and_expires(self):
         with patch.object(kb, "_native_search", return_value=[self.hit()]):
             result = self.search()
         ticket = result["ticket"]
         for chat, sender in [("oc_test_b", "ou_test_reader"), ("oc_test_a", "ou_other")]:
             with self.assertRaises(ValueError):
-                kb.ticket_materials(self.root, ticket, chat, sender)
+                kb.ticket_materials(self.root, ticket, chat, sender, "s14-a")
+        with self.assertRaises(ValueError):
+            kb.ticket_materials(self.root, ticket, "oc_test_a", "ou_test_reader", "s14-b")
         with patch.object(kb.time, "time", return_value=10**12), self.assertRaises(ValueError):
-            kb.ticket_materials(self.root, ticket, "oc_test_a", "ou_test_reader")
+            kb.ticket_materials(self.root, ticket, "oc_test_a", "ou_test_reader", "s14-a")
 
     def test_tickets_replace_old_context_instead_of_growing_per_question(self):
         with patch.object(kb, "_native_search", return_value=[self.hit()]):
             old, new = self.search(), self.search()
         with self.assertRaises(ValueError):
-            kb.ticket_materials(self.root, old["ticket"], "oc_test_a", "ou_test_reader")
-        self.assertTrue(kb.ticket_materials(self.root, new["ticket"], "oc_test_a", "ou_test_reader"))
+            kb.ticket_materials(self.root, old["ticket"], "oc_test_a", "ou_test_reader", "s14-a")
+        self.assertTrue(kb.ticket_materials(self.root, new["ticket"], "oc_test_a", "ou_test_reader", "s14-a"))
         with closing(sqlite3.connect(self.root / "state/qa.sqlite")) as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM contexts").fetchone()[0], 1)
 
     def test_final_reply_appends_real_sources_and_respects_output_gate(self):
         with patch.object(kb, "_native_search", return_value=[self.hit()]):
             result = self.search()
-        kwargs = dict(db=self.db, chat_id="oc_test_a", sender_id="ou_test_reader")
+        kwargs = dict(account_id="s14-a", chat_id="oc_test_a", sender_id="ou_test_reader")
         with patch("marketing_diagnosis.knowledge_delivery._gate", return_value=True):
             text = finalize_answer("先明确适用条件，再评估价格策略。", result["ticket"], **kwargs)
         self.assertIn("课程来源", text)
@@ -202,7 +231,7 @@ class SharedKnowledgeTests(unittest.TestCase):
             result = self.search()
         with patch("marketing_diagnosis.knowledge_delivery._gate", return_value=True):
             for draft in ["publication_status=draft", "已执行降价", "```json\n{}\n```", result["ticket"]]:
-                self.assertIn("未通过内容检查", finalize_answer(draft, result["ticket"], db=self.db,
+                self.assertIn("未通过内容检查", finalize_answer(draft, result["ticket"], account_id="s14-a",
                               chat_id="oc_test_a", sender_id="ou_test_reader"))
 
     def test_question_routing_separates_methods_reports_facts_and_execution(self):

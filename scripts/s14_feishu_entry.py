@@ -735,6 +735,8 @@ def main() -> int:
     parser.add_argument("--chat-id", default=os.environ.get("FEISHU_CHAT_ID", ""))
     parser.add_argument("--hotel-id", default=None, help="Local-only assertion; group bindings remain authoritative.")
     parser.add_argument("--sender-id", default=os.environ.get("FEISHU_SENDER_ID", ""))
+    parser.add_argument("--account-id", default=os.environ.get("FEISHU_ACCOUNT_ID", ""),
+                        help="Trusted receiving S14 bot account; required for shared course questions.")
     parser.add_argument("--source-choice", default="")
     parser.add_argument("--report-current-db", action="store_true",
                         help="Report the DB the current group is bound to (per chat binding).")
@@ -770,12 +772,12 @@ def main() -> int:
 
     try:
         if args.knowledge_context:
-            result = search_context(args.text, db=AUTH_DB_PATH, chat_id=chat_id or "", sender_id=sender_id or "")
+            result = search_context(args.text, chat_id=chat_id or "", sender_id=sender_id or "", account_id=args.account_id)
             print(json.dumps(result, ensure_ascii=False))
             return 0
         if args.knowledge_answer is not None:
             return _print(finalize_answer(args.knowledge_answer, args.knowledge_ticket,
-                          db=AUTH_DB_PATH, chat_id=chat_id or "", sender_id=sender_id or ""))
+                          chat_id=chat_id or "", sender_id=sender_id or "", account_id=args.account_id))
         if args.report_current_db:
             return _print(_report_current_db(chat_id))
 

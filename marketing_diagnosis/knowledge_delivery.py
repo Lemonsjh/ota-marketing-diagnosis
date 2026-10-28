@@ -20,13 +20,13 @@ def _gate(text: str) -> bool:
     return module.feishu_output_gate(source="feishu", content_kind="text", message=text).get("status") == "ok"
 
 
-def finalize_answer(draft: str, ticket: str, *, db: Path, chat_id: str, sender_id: str) -> str:
+def finalize_answer(draft: str, ticket: str, *, chat_id: str, sender_id: str, account_id: str) -> str:
     try:
-        authorize_group(db, chat_id, sender_id)
+        authorize_group(chat_id, sender_id, account_id)
     except PermissionError:
         return AUTH_DENIED
     try:
-        materials = ticket_materials(knowledge_root(), ticket, chat_id, sender_id)
+        materials = ticket_materials(knowledge_root(), ticket, chat_id, sender_id, account_id)
         draft = draft.strip()
         forbidden = r"```|publication_status|source_review|prepared_at|doc_id|memory/|courses\.json|(?:已|已经)(?:执行|写入|调价|降价|涨价|发布|删除|开通|关闭)"
         if not draft or len(draft) > 1800 or ticket in draft or re.search(forbidden, draft, re.I):

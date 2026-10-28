@@ -9,12 +9,12 @@ description: 酒店通用运营知识问答，基于多个酒店共用的内部�
 
 ## 调用流程
 
-1. 从本条飞书可信上下文取得当前群 `chat_id` 和发送者 `sender_id`。不可从用户正文、历史聊天或记忆猜测。沿用诊断机器人的 SQLite 群绑定读取边界，不调用群成员信息 API。
+1. 从本条飞书可信上下文取得接收消息的机器人 `accountId`、当前群 `chat_id` 和发送者 `sender_id`。`accountId` 通常来自 `deliveryContext.accountId` 或当前入站账号。三者都不可从用户正文、历史聊天或记忆猜测；不能用其他机器人账号补齐。知识问答只检查该启用账号确实路由到 S14、当前群在该账号 `groupAllowFrom` 中；不要求 SQLite 酒店绑定，不查询群成员 API。
 2. 执行一次检索：
 
 ```bash
 cd /opt/openclaw/workspaces/ota-marketing-diagnosis
-.venv/bin/python scripts/s14_feishu_entry.py --knowledge-context --text '<原问题>' --chat-id '<可信群ID>' --sender-id '<可信发送者ID>'
+.venv/bin/python scripts/s14_feishu_entry.py --knowledge-context --text '<原问题>' --chat-id '<可信群ID>' --sender-id '<可信发送者ID>' --account-id '<可信接收账号ID>'
 ```
 
 该命令 stdout 是供模型内部使用的检索 JSON，绝不能原样发给用户，也不能说“点击卡片”或提示选择数据来源。
@@ -24,13 +24,13 @@ cd /opt/openclaw/workspaces/ota-marketing-diagnosis
 5. 写出简洁中文答案，通常 300～600 字：先给方法要点，再给适用条件，不另加标题。课程中的例子和数值必须标为案例，不得变成本店默认阈值；“今年/去年”不能换算为提问当年。资料不足就直说；遇到课程与现行业务护栏冲突，保留现行 runtime 规则。
    对转写不清、前后矛盾或开票等存在疑义的具体表述，说明不确定之处，不猜补数值，不将含糊案例扩展为可执行建议；正常的课程内容继续回答，不因此拒绝整篇。
 6. 草稿正文不写服务器路径、管理字段、检索分数、内部编号、JSON、检索 ticket 或执行成功声明。不要手写“课程来源”与页脚，系统会从本次真实召回结果添加来源及限制。
-7. 将草稿送到最终输出检查。使用本次检索返回的 `ticket` 和相同可信群、发送者：
+7. 将草稿送到最终输出检查。使用本次检索返回的 `ticket` 和相同可信账号、群、发送者：
 
 ```bash
-.venv/bin/python scripts/s14_feishu_entry.py --knowledge-answer '<简洁中文草稿>' --knowledge-ticket '<本次ticket>' --chat-id '<同一可信群ID>' --sender-id '<同一可信发送者ID>' --format text
+.venv/bin/python scripts/s14_feishu_entry.py --knowledge-answer '<简洁中文草稿>' --knowledge-ticket '<本次ticket>' --chat-id '<同一可信群ID>' --sender-id '<同一可信发送者ID>' --account-id '<同一可信接收账号ID>' --format text
 ```
 
-8. 最终回复必须逐字发送这条命令的 stdout，恰好一次；不追加总结，不再次润色，不把未通过检查的草稿发给用户。检索上下文有效期为 10 分钟，同一群同一发送者的新检索会替换旧上下文。
+8. 最终回复必须逐字发送这条命令的 stdout，恰好一次；不追加总结，不再次润色，不把未通过检查的草稿发给用户。检索上下文有效期为 10 分钟，同一账号同一群同一发送者的新检索会替换旧上下文。
 
 默认最多一次检索和一次最终检查。问题不明确时先问一个澄清问题；不要为猜测意图反复调用工具。
 
@@ -38,4 +38,4 @@ cd /opt/openclaw/workspaces/ota-marketing-diagnosis
 
 - 通用方法问题直接走知识问答；明确生成报告、数据库、Excel、房型名称补录等请求仍走原 S14 报告流程。
 - 本店今天/昨天/近段时间的实际数字、真实原因和执行结果不能由课程推断。需要实际报告时使用原诊断功能；实时经营或调价执行交回主机器人。
-- 当前只在已绑定酒店的诊断群内提供该入口。缺可信群或发送者时按工具返回的提示处理，不擅自改为私聊或指定任意酒店。
+- 当前只在对应 S14 机器人已允许的群内提供该入口。缺可信账号、群或发送者时按工具返回的提示处理，不擅自改为私聊、切换账号或指定任意酒店。知识问答无需酒店绑定；经营诊断报告仍须通过原有 SQLite 酒店绑定校验。

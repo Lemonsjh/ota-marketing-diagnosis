@@ -34,15 +34,16 @@ openclaw memory status --agent hotel-shared-knowledge --index --json
 
 ## 问答入口
 
-在已绑定酒店的诊断群中直接问“酒店动态定价怎么做”“浏览多但订单少怎么排查”等通用方法。知识问答不要求选择数据库或上传 Excel；实际经营报告仍走原有诊断流程。
+在对应 S14 机器人已加入 `groupAllowFrom` 白名单的群中直接问“酒店动态定价怎么做”“浏览多但订单少怎么排查”等通用方法。知识问答不要求选择数据库或上传 Excel；实际经营报告仍走原有诊断流程。
 
-`hotel-shared-knowledge` Skill 先通过 `s14_feishu_entry.py --knowledge-context` 检查 SQLite 绑定群权限并检索课程，再由现有模型组织答案，最后用 `--knowledge-answer` 检查输出并添加课程标题、章节和内部参考说明。检索 JSON 只供模型内部使用。
+`hotel-shared-knowledge` Skill 先通过 `s14_feishu_entry.py --knowledge-context` 按本条可信 `accountId` 检查该启用账号已路由到 S14、当前群在它的 `groupAllowFrom` 内，再检索课程，再由现有模型组织答案，最后用 `--knowledge-answer` 检查输出并添加课程标题、章节和内部参考说明。两次调用都须传 `--account-id`、`--chat-id` 和 `--sender-id`，不能借用其他账号的群白名单。知识问答不再查询 SQLite 酒店绑定，诊断报告仍保留原校验。检索 JSON 只供模型内部使用。
 
-同群、同发送者的检索上下文有效期 10 分钟，保存在 `state/qa.sqlite`；每个群/发送者组合只保留最新一条。最终回复仍经过主项目现有的 Feishu 输出闸门，知识问答不执行调价或其他业务写入。
+同账号、同群、同发送者的检索上下文有效期 10 分钟，保存在 `state/qa.sqlite`；每个账号/群/发送者组合只保留最新一条。最终回复仍经过主项目现有的 Feishu 输出闸门，知识问答不执行调价或其他业务写入。
 
 ## 配置项
 
 - `S14_KNOWLEDGE_ROOT`：默认 `/var/lib/hotel-ota-ai/shared-knowledge`。
 - `S14_OPENCLAW_BIN`：默认 `openclaw`。
 - `S14_OUTPUT_GATE_FILE`：默认 `/opt/openclaw/workspaces/hotel-ota-ai/runtime/safety/feishu_output.py`。
-- SQLite 继续使用既有 `HOTEL_OTA_DB`；未改变角色、群绑定或现有模型配置。
+- `S14_GATEWAY_CONFIG`：主网关配置路径；默认沿用 `OPENCLAW_CONFIG_PATH`，未设置时使用 `/root/.openclaw/openclaw.json`。不要指向知识库的独立检索配置。
+- `HOTEL_OTA_DB`：仅酒店诊断报告继续使用 SQLite 酒店绑定；共享课程不依赖此绑定，也不创建绑定或授予酒店数据权限。

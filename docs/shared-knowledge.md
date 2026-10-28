@@ -1,82 +1,48 @@
 # 共享课程知识问答
 
-首批使用用户在 2026-10-28 明确选定的 22 篇无待复核标记课程，发布用途为内部参考。
-这不等于平台现行规则核验通过。原始草稿不改写，课程正文不提交到代码仓库。
+首批接入用户在 2026-10-28 选定的 22 篇课程，作为内部参考。多个酒店共用一份资料，现有诊断机器人负责回答；不新增飞书账号、网关或模型密钥。
 
-## 结构
-
-- 原生 OpenClaw `memory-core` 和现有本地嵌入模型，独立检索配置及 SQLite 索引。
-- 诊断机器人仍使用现有模型，根据检索片段组织回答，不新增模型 API 密钥。
-- `hotel-shared-knowledge` 是检索配置的 Agent 名，不新增飞书账号或另一个运行中的网关。
-- 原诊断报告、数据库/Excel 选择和人工房型名称流程保持独立。
-
-群内可直接问：
-
-- 酒店动态定价怎么做？
-- 浏览多但订单少，应该先排查什么？
-- 评价会怎样影响酒店转化率？
-- 年度经营目标应该怎么分解？
-
-明确查询本店当天事实、生成报告或执行调价时，不用课程资料代替真实数据和现有业务流程。
-
-## 发布资料
-
-```bash
-python scripts/export_shared_knowledge.py --source SOURCE_MARKDOWN_DIR --target NEW_RELEASE_DIR
-```
-
-导出器只接受 `knowledge_corpus.APPROVED_COURSES` 中的固定 22 篇，同时要求共享范围和待复核标记为零；缺失、重复或有复核标记时终止。YAML 管理字段不进入导出正文，原始资料不变。导出清单保存正文 SHA-256，运行时重新核对。
-
-每个版本使用新的 release 目录，避免旧索引、撤下课程和新版本混在一起：
+## 固定目录
 
 ```text
 /var/lib/hotel-ota-ai/shared-knowledge/
-  releases/20261028-r1/
-    release.json
-    openclaw.json
-    workspace/memory/courses/*.md
-    state/
-    READY.json
-    retrieval_tickets.sqlite
-  current -> releases/20261028-r1
+  memory/          # 课程正文，每篇一个 Markdown
+  courses.json     # 允许检索的课程编号清单
+  openclaw.json    # 原生 memory 检索配置
+  state/           # 原生索引和临时问答上下文
 ```
 
-`openclaw.json` 使用一个 `hotel-shared-knowledge` Agent，其 workspace 指向本版本的 `workspace`，`memorySearch.provider=local`，`sources=["memory"]`，不挂 `extraPaths` 或会话。使用已安装模型的 `local.modelPath`；配置不包含飞书账号、酒店数据源或模型 API 密钥。
+没有版本目录、当前版本软链接或就绪标记文件。`courses.json` 只是课程编号数组；例如编号 `OP-008` 对应 `memory/OP-008.md`，标题从正文首行 `# 标题` 读取。
 
-首次索引命令：
+`openclaw.json` 中的 `hotel-shared-knowledge` 使用上述固定目录作为 workspace，`memorySearch.provider=local`、`sources=["memory"]`，并指定现有本地模型的 `local.modelPath`。课程正文与酒店会话、经营报告及主机器人记忆分开。
+
+## 更新资料
+
+修改现有课程时，直接编辑 `memory/` 下的 Markdown，再更新原生索引：
 
 ```bash
-OPENCLAW_CONFIG_PATH=NEW_RELEASE_DIR/openclaw.json \
-OPENCLAW_STATE_DIR=NEW_RELEASE_DIR/state \
+OPENCLAW_CONFIG_PATH=/var/lib/hotel-ota-ai/shared-knowledge/openclaw.json \
+OPENCLAW_STATE_DIR=/var/lib/hotel-ota-ai/shared-knowledge/state \
 openclaw memory status --agent hotel-shared-knowledge --index --json
 ```
 
-只有返回正常、文件数为 22、无待同步变更、嵌入探测成功且向量维度为 768 后，才写 `READY.json`：
+新增或撤下课程时，同时调整 `memory/` 中的文件和 `courses.json` 清单，再运行上述命令。增加已批准课程不需要修改程序或创建新版本。管理记录、酒店数据和 YAML 管理字段不放进正文。
 
-```json
-{"version":"2026-10-28-internal-r1","ready":true,"files":22}
-```
+首批原始草稿可用 `scripts/export_shared_knowledge.py --source 原始目录 --target 上述固定目录` 转成纯正文；该导出工具只处理本次获准的 22 篇。之后直接维护正文和清单即可。
 
-索引完整后再将 `current` 切向新版本。首建采用本地 CPU，需等待；不要把命令已经启动当作索引已经完成。
+程序根据原生 SQLite 索引中的文件及内容摘要，确认索引与当前正文一致，不再另外维护就绪标记。资料改动后尚未更新索引时，查询会提示暂不可用；已有向量缓存会在更新索引时复用。
 
-## 调用及输出
+## 问答入口
 
-`skills/hotel-shared-knowledge/SKILL.md` 规定两次调用：
+在已绑定酒店的诊断群中直接问“酒店动态定价怎么做”“浏览多但订单少怎么排查”等通用方法。知识问答不要求选择数据库或上传 Excel；实际经营报告仍走原有诊断流程。
 
-1. `s14_feishu_entry.py --knowledge-context`：先读取 SQLite Active Auth，验证 backend active、可信发送者及当前群的 active 酒店绑定，沿用 S14 现有绑定群只读边界。成功后才能查询课程。返回的 JSON 仅供模型内部使用。
-2. `--knowledge-answer DRAFT --knowledge-ticket TICKET`：再次鉴权，校验本群本人的本次检索上下文及正文版本，调用主项目现有 `feishu_output_gate`，自动添加实际检索课程的标题、章节和内部参考说明。最终 stdout 逐字发送一次。
+`hotel-shared-knowledge` Skill 先通过 `s14_feishu_entry.py --knowledge-context` 检查 SQLite 绑定群权限并检索课程，再由现有模型组织答案，最后用 `--knowledge-answer` 检查输出并添加课程标题、章节和内部参考说明。检索 JSON 只供模型内部使用。
 
-检索上下文有效期 10 分钟，每个群/发送者组合只保留最新一条，不保存原始身份 ID 或用户问题，也不把这些记录加入课程索引。同一上下文不可跨群、跨发送者复用。
+同群、同发送者的检索上下文有效期 10 分钟，保存在 `state/qa.sqlite`；每个群/发送者组合只保留最新一条。最终回复仍经过主项目现有的 Feishu 输出闸门，知识问答不执行调价或其他业务写入。
 
-检索只接收发布清单中的路径，并按真实文件行号读取原文，不信任工具自带的任意摘要。只要出现额外 Markdown、正文修改、发布状态变化或未就绪索引，就拒绝查询；错误不包含私有路径、异常栈或原始命令。
+## 配置项
 
-## 运维配置
-
-- `S14_KNOWLEDGE_ROOT`：默认 `/var/lib/hotel-ota-ai/shared-knowledge/current`，可指定当前已发布版本。
+- `S14_KNOWLEDGE_ROOT`：默认 `/var/lib/hotel-ota-ai/shared-knowledge`。
 - `S14_OPENCLAW_BIN`：默认 `openclaw`。
-- `S14_OUTPUT_GATE_FILE`：默认 `/opt/openclaw/workspaces/hotel-ota-ai/runtime/safety/feishu_output.py`，必须是受控主项目中的现有输出闸门；不存在或调用失败时拒绝输出。
-- SQLite 继续使用既有 `HOTEL_OTA_DB`，不新增角色、群绑定或全局管理员。
-
-当前入口只支持已有绑定的诊断群，与现有 S14 群读取范围一致。没有增加私聊酒店选择或跨酒店管理能力。
-
-新增或撤下课程要明确更新发布范围、生成新版本、完成全量索引再切换；仅修改 Markdown 的草稿状态不会自动成为发布或撤下操作。
+- `S14_OUTPUT_GATE_FILE`：默认 `/opt/openclaw/workspaces/hotel-ota-ai/runtime/safety/feishu_output.py`。
+- SQLite 继续使用既有 `HOTEL_OTA_DB`；未改变角色、群绑定或现有模型配置。

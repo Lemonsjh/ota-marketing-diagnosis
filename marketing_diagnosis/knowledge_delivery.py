@@ -6,7 +6,7 @@ import os
 import re
 from pathlib import Path
 
-from .shared_knowledge import AUTH_DENIED, UNAVAILABLE, authorize_group, release_root, ticket_materials
+from .shared_knowledge import AUTH_DENIED, UNAVAILABLE, authorize_group, knowledge_root, ticket_materials
 
 
 def _gate(text: str) -> bool:
@@ -26,9 +26,9 @@ def finalize_answer(draft: str, ticket: str, *, db: Path, chat_id: str, sender_i
     except PermissionError:
         return AUTH_DENIED
     try:
-        materials = ticket_materials(release_root(), ticket, chat_id, sender_id)
+        materials = ticket_materials(knowledge_root(), ticket, chat_id, sender_id)
         draft = draft.strip()
-        forbidden = r"```|publication_status|source_review|prepared_at|doc_id|memory/courses|release\.json|(?:已|已经)(?:执行|写入|调价|降价|涨价|发布|删除|开通|关闭)"
+        forbidden = r"```|publication_status|source_review|prepared_at|doc_id|memory/|courses\.json|(?:已|已经)(?:执行|写入|调价|降价|涨价|发布|删除|开通|关闭)"
         if not draft or len(draft) > 1800 or ticket in draft or re.search(forbidden, draft, re.I):
             return "知识回答未通过内容检查，请重新提出具体的课程问题。"
         references = list(dict.fromkeys(f"《{m['title']}》·{m['section']}" for m in materials))

@@ -14,8 +14,7 @@ def main() -> None:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--target", type=Path, required=True)
     args = parser.parse_args()
-    manifest = export_courses(args.source, args.target)
-    print(json.dumps({"version": manifest["version"], "documents": len(manifest["documents"])}))
+    print(json.dumps(export_courses(args.source, args.target)))
 
 
 if __name__ == "__main__":

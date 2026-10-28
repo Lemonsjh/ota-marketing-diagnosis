@@ -13,13 +13,13 @@ import time
 from contextlib import closing
 from pathlib import Path
 
-from .knowledge_corpus import RELEASE_VERSION, load_release
+from .knowledge_corpus import load_courses
 
 PROFILE = "hotel-shared-knowledge"
 UNAVAILABLE = "共享课程检索暂不可用，请稍后再试。"
 AUTH_DENIED = "请在已绑定酒店的诊断群中，使用当前飞书身份查询共享课程。"
 FACT_QUERY = "共享知识库只提供课程方法参考。查询本店实际经营情况，请使用诊断报告或主机器人。"
-PUBLIC_ROOT = Path("/var/lib/hotel-ota-ai/shared-knowledge/current")
+PUBLIC_ROOT = Path("/var/lib/hotel-ota-ai/shared-knowledge")
 
 
 def is_knowledge_question(text: str) -> bool:
@@ -64,26 +64,27 @@ def authorize_group(db: Path, chat_id: str, sender_id: str) -> None:
         raise PermissionError(AUTH_DENIED) from exc
 
 
-def release_root() -> Path:
+def knowledge_root() -> Path:
     return Path(os.environ.get("S14_KNOWLEDGE_ROOT", str(PUBLIC_ROOT))).resolve()
 
 
-def _ready_release(root: Path) -> dict:
-    ready = json.loads((root / "READY.json").read_text(encoding="utf-8"))
-    if ready.get("version") != RELEASE_VERSION or ready.get("ready") is not True or ready.get("files") != 22:
-        raise ValueError("index is not ready")
-    docs = load_release(root)
-    workspace = (root / "workspace").resolve()
-    paths = {p.relative_to(workspace).as_posix() for p in workspace.rglob("*.md")}
-    if paths != set(docs):
+def _knowledge_documents(root: Path) -> dict:
+    docs = load_courses(root)
+    paths = {p.relative_to(root).as_posix() for p in (root / "memory").rglob("*.md")}
+    if paths != set(docs) or any((root / name).exists() for name in ["MEMORY.md", "memory.md"]):
         raise ValueError("non-course Markdown is present")
     config = json.loads((root / "openclaw.json").read_text(encoding="utf-8"))
     defaults = config["agents"]["defaults"]
     memory = defaults["memorySearch"]
-    if (Path(defaults["workspace"]).resolve() != workspace or memory.get("sources") != ["memory"]
+    if (Path(defaults["workspace"]).resolve() != root.resolve() or memory.get("sources") != ["memory"]
             or memory.get("extraPaths") or memory.get("provider") != "local"
             or [a["id"] for a in config["agents"]["list"]] != [PROFILE]):
         raise ValueError("retrieval profile scope changed")
+    index = root / "state" / "memory" / f"{PROFILE}.sqlite"
+    with closing(sqlite3.connect(index.resolve().as_uri() + "?mode=ro", uri=True)) as con:
+        indexed = dict(con.execute("SELECT path, hash FROM files WHERE source='memory'"))
+    if indexed != {path: doc["sha256"] for path, doc in docs.items()}:
+        raise ValueError("course index needs updating")
     return docs
 
 
@@ -130,7 +131,7 @@ def _materials(root: Path, docs: dict, results: list) -> list[dict]:
         path = str(hit.get("path", ""))
         if path not in docs or float(hit.get("score", 0)) < 0.35:
             continue
-        lines = (root / "workspace" / path).read_text(encoding="utf-8").splitlines()
+        lines = (root / path).read_text(encoding="utf-8").splitlines()
         first, last = int(hit.get("startLine", 0)), int(hit.get("endLine", 0))
         if first < 1 or last < first or first > len(lines):
             continue
@@ -154,7 +155,7 @@ def _owner(chat_id: str, sender_id: str) -> str:
 
 
 def _ticket_db(root: Path) -> sqlite3.Connection:
-    con = sqlite3.connect(root / "retrieval_tickets.sqlite")
+    con = sqlite3.connect(root / "state" / "qa.sqlite")
     con.execute("CREATE TABLE IF NOT EXISTS contexts(owner TEXT PRIMARY KEY, ticket TEXT, expires REAL, materials TEXT)")
     return con
 
@@ -169,8 +170,8 @@ def search_context(query: str, *, db: Path, chat_id: str, sender_id: str) -> dic
     if re.sub(r"\s+", "", query) in {"知识库", "共享知识库", "知识问答", "课程咨询", "打开知识库"}:
         return {"status": "help", "message": "可直接询问课程方法，例如：酒店动态定价怎么做？浏览多但订单少怎么排查？年度目标怎样分解？"}
     try:
-        root = release_root()
-        docs = _ready_release(root)
+        root = knowledge_root()
+        docs = _knowledge_documents(root)
         materials = _materials(root, docs, _native_search(root, query))
         if not materials:
             return {"status": "no_match", "message": "当前共享课程中未找到足够相关的内容，暂不能据此作答。"}
@@ -187,13 +188,13 @@ def search_context(query: str, *, db: Path, chat_id: str, sender_id: str) -> dic
 def ticket_materials(root: Path, ticket: str, chat_id: str, sender_id: str) -> list[dict]:
     if not re.fullmatch(r"[0-9a-f]{32}", ticket):
         raise ValueError("invalid ticket")
-    docs = _ready_release(root)
+    docs = _knowledge_documents(root)
     with closing(_ticket_db(root)) as con:
         row = con.execute("SELECT materials FROM contexts WHERE owner=? AND ticket=? AND expires>?",
                           (_owner(chat_id, sender_id), ticket, time.time())).fetchone()
     if not row:
         raise ValueError("retrieval context expired")
     materials = json.loads(row[0])
-    if not materials or any(f"memory/courses/{m['doc_id']}.md" not in docs for m in materials):
+    if not materials or any(f"memory/{m['doc_id']}.md" not in docs for m in materials):
         raise ValueError("retrieved course was withdrawn")
     return materials

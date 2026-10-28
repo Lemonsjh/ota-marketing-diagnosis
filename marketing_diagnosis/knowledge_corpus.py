@@ -1,4 +1,4 @@
-"""Export the explicitly approved course release, never hotel/session data."""
+"""Export shared course text and a small allowlist, never hotel/session data."""
 from __future__ import annotations
 
 import hashlib
@@ -11,7 +11,6 @@ BG-001 EC-002 EC-005 EC-007 EC-010 EC-012 EC-013 EC-014 EC-017 EC-018
 MK-001 OP-003 OP-004 OP-006 OP-008 OP-009 OP-011 OP-012 OP-013 OP-014
 OP-019 RM-001
 """.split())
-RELEASE_VERSION = "2026-10-28-internal-r1"
 
 
 def digest(text: str) -> str:
@@ -33,9 +32,7 @@ def course_parts(text: str) -> tuple[dict, str]:
 
 
 def export_courses(source: Path, target: Path) -> dict:
-    """Create a new immutable release; leave all original drafts untouched."""
-    if target.exists():
-        raise ValueError("release target must be new")
+    """Write the approved courses to a fixed directory; leave drafts untouched."""
     courses = {}
     for path in sorted(source.rglob("*.md")):
         meta, body = course_parts(path.read_text(encoding="utf-8"))
@@ -49,33 +46,31 @@ def export_courses(source: Path, target: Path) -> dict:
         courses[code] = (meta, body)
     if set(courses) != APPROVED_COURSES:
         raise ValueError("approved course set is incomplete")
-    directory = target / "workspace" / "memory" / "courses"
-    directory.mkdir(parents=True)
-    documents = []
-    for code, (meta, body) in sorted(courses.items()):
-        relative = f"memory/courses/{code}.md"
-        (target / "workspace" / relative).write_text(body, encoding="utf-8", newline="\n")
-        documents.append({"doc_id": code, "title": meta["title"], "path": relative,
-                          "sha256": digest(body), "status": "internal_reference"})
-    manifest = {"version": RELEASE_VERSION, "scope": "shared_courses_only", "documents": documents}
-    (target / "release.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    return manifest
+    directory = target / "memory"
+    directory.mkdir(parents=True, exist_ok=True)
+    for code, (_, body) in sorted(courses.items()):
+        (directory / f"{code}.md").write_text(body, encoding="utf-8", newline="\n")
+    codes = sorted(courses)
+    (target / "courses.json").write_text(json.dumps(codes, indent=2), encoding="utf-8")
+    return {"documents": len(codes)}
 
 
-def load_release(root: Path) -> dict[str, dict]:
-    manifest = json.loads((root / "release.json").read_text(encoding="utf-8"))
-    if manifest.get("version") != RELEASE_VERSION or manifest.get("scope") != "shared_courses_only":
-        raise ValueError("unknown course release")
-    docs = manifest.get("documents", [])
-    if len(docs) != len(APPROVED_COURSES) or {d.get("doc_id") for d in docs} != APPROVED_COURSES:
-        raise ValueError("release course set changed")
-    workspace = (root / "workspace").resolve()
+def load_courses(root: Path) -> dict[str, dict]:
+    codes = json.loads((root / "courses.json").read_text(encoding="utf-8-sig"))
+    if (not isinstance(codes, list) or not codes
+            or any(not isinstance(code, str) or not re.fullmatch(r"[A-Z]{2}-\d{3}", code) for code in codes)
+            or len(set(codes)) != len(codes)):
+        raise ValueError("invalid course list")
+    root = root.resolve()
     result = {}
-    for doc in docs:
-        relative = f"memory/courses/{doc['doc_id']}.md"
-        path = (workspace / relative).resolve()
-        if (doc.get("path") != relative or doc.get("status") != "internal_reference"
-                or not path.is_relative_to(workspace) or digest(path.read_text(encoding="utf-8")) != doc.get("sha256")):
-            raise ValueError("course is outside the release or has changed")
-        result[relative] = doc
+    for code in codes:
+        relative = f"memory/{code}.md"
+        path = (root / relative).resolve()
+        if not path.is_relative_to(root / "memory"):
+            raise ValueError("course is outside the knowledge directory")
+        body = path.read_bytes().decode("utf-8")
+        title = body.splitlines()[0].lstrip("\ufeff") if body else ""
+        if not title.startswith("# ") or not title[2:].strip():
+            raise ValueError("course title is missing")
+        result[relative] = {"doc_id": code, "title": title[2:].strip(), "sha256": digest(body)}
     return result

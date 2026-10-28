@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from marketing_diagnosis import shared_knowledge as kb
-from marketing_diagnosis.knowledge_corpus import APPROVED_COURSES, RELEASE_VERSION, export_courses, load_release
+from marketing_diagnosis.knowledge_corpus import APPROVED_COURSES, export_courses, load_courses
 from marketing_diagnosis.knowledge_delivery import finalize_answer
 
 
@@ -21,17 +21,20 @@ class SharedKnowledgeTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(dir=cache, prefix="knowledge_")
         self.addCleanup(self.tmp.cleanup)
         base = Path(self.tmp.name)
-        self.source, self.root, self.db = base / "drafts", base / "release", base / "auth.sqlite"
+        self.source, self.root, self.db = base / "drafts", base / "knowledge", base / "auth.sqlite"
         self.source.mkdir()
         for code in sorted(APPROVED_COURSES):
             self.write_course(code)
         self.write_course("OP-018", issues=1)
         export_courses(self.source, self.root)
-        config = {"agents": {"defaults": {"workspace": str(self.root / "workspace"),
+        config = {"agents": {"defaults": {"workspace": str(self.root),
                   "memorySearch": {"provider": "local", "sources": ["memory"]}},
                   "list": [{"id": kb.PROFILE}]}}
         (self.root / "openclaw.json").write_text(json.dumps(config))
-        (self.root / "READY.json").write_text(json.dumps({"version": RELEASE_VERSION, "ready": True, "files": 22}))
+        (self.root / "state/memory").mkdir(parents=True)
+        with closing(sqlite3.connect(self.root / f"state/memory/{kb.PROFILE}.sqlite")) as con, con:
+            con.execute("CREATE TABLE files(path TEXT, hash TEXT, source TEXT)")
+            con.executemany("INSERT INTO files VALUES(?,?,'memory')", [(path, doc["sha256"]) for path, doc in load_courses(self.root).items()])
         with closing(sqlite3.connect(self.db)) as con, con:
             con.executescript("""
             CREATE TABLE auth_backend_state(backend_name TEXT,status TEXT);
@@ -55,15 +58,15 @@ class SharedKnowledgeTests(unittest.TestCase):
         return kb.search_context("酒店动态定价怎么做？", db=self.db, chat_id=chat, sender_id=sender)
 
     def hit(self, **changes):
-        result = {"path": "memory/courses/OP-008.md", "score": 0.55, "startLine": 5, "endLine": 5,
+        result = {"path": "memory/OP-008.md", "score": 0.55, "startLine": 5, "endLine": 5,
                   "snippet": "伪造的工具摘要不应被使用"}
         return {**result, **changes}
 
     def test_export_exact_approved_set_and_remove_management_fields(self):
-        docs = load_release(self.root)
+        docs = load_courses(self.root)
         self.assertEqual(len(docs), 22)
-        self.assertFalse((self.root / "workspace/memory/courses/OP-018.md").exists())
-        body = (self.root / "workspace/memory/courses/OP-008.md").read_text(encoding="utf-8")
+        self.assertFalse((self.root / "memory/OP-018.md").exists())
+        body = (self.root / "memory/OP-008.md").read_text(encoding="utf-8")
         self.assertNotIn("publication_status", body)
         self.assertTrue(body.startswith("# 课程"))
         self.assertIn('publication_status: "draft"', (self.source / "OP-008.md").read_text(encoding="utf-8"))
@@ -111,21 +114,48 @@ class SharedKnowledgeTests(unittest.TestCase):
         self.assertNotIn("path", material)
 
     def test_unapproved_path_traversal_and_low_score_are_not_returned(self):
-        hits = [self.hit(path="../../auth-profiles.json"), self.hit(path="memory/courses/OP-018.md"), self.hit(score=0.1)]
+        hits = [self.hit(path="../../auth-profiles.json"), self.hit(path="memory/OP-018.md"), self.hit(score=0.1)]
         with patch.object(kb, "_native_search", return_value=hits):
             self.assertEqual(self.search()["status"], "no_match")
 
-    def test_source_change_extra_memory_or_unready_index_blocks_search(self):
-        path = self.root / "workspace/MEMORY.md"
+    def test_source_change_extra_memory_or_outdated_index_blocks_search(self):
+        path = self.root / "MEMORY.md"
         path.write_text("其他酒店的会话记忆", encoding="utf-8")
         with patch.object(kb, "_native_search") as native:
             self.assertEqual(self.search()["status"], "unavailable")
             native.assert_not_called()
         # Move the fixture aside rather than deleting any external files.
         path.rename(self.root / "held-memory.txt")
-        course = self.root / "workspace/memory/courses/OP-008.md"
-        course.write_text("changed", encoding="utf-8")
+        course = self.root / "memory/OP-008.md"
+        course.write_text(course.read_text(encoding="utf-8") + "补充课程内容。\n", encoding="utf-8")
         self.assertEqual(self.search()["status"], "unavailable")
+
+    def test_missing_index_blocks_without_creating_a_database(self):
+        index = self.root / f"state/memory/{kb.PROFILE}.sqlite"
+        index.rename(index.with_suffix(".held"))
+        with patch.object(kb, "_native_search") as native:
+            self.assertEqual(self.search()["status"], "unavailable")
+            native.assert_not_called()
+        self.assertFalse(index.exists())
+
+    def test_fixed_directory_can_be_updated_without_a_new_release(self):
+        source = self.source / "OP-008.md"
+        source.write_text(source.read_text(encoding="utf-8") + "更新后的课程内容。\n", encoding="utf-8")
+        self.assertEqual(export_courses(self.source, self.root)["documents"], 22)
+        self.assertIn("更新后的课程内容", (self.root / "memory/OP-008.md").read_text(encoding="utf-8"))
+        self.assertFalse((self.root / "READY.json").exists())
+        self.assertFalse((self.root / "release.json").exists())
+
+    def test_course_list_can_add_an_approved_document_without_code_changes(self):
+        path = self.root / "memory/EC-099.md"
+        path.write_text("# 新批准的课程\n\n课程正文。\n", encoding="utf-8")
+        listing = self.root / "courses.json"
+        listing.write_text(json.dumps(json.loads(listing.read_text()) + ["EC-099"]))
+        docs = load_courses(self.root)
+        self.assertEqual(len(docs), 23)
+        with closing(sqlite3.connect(self.root / f"state/memory/{kb.PROFILE}.sqlite")) as con, con:
+            con.execute("INSERT INTO files VALUES(?,?,'memory')", ("memory/EC-099.md", docs["memory/EC-099.md"]["sha256"]))
+        self.assertEqual(len(kb._knowledge_documents(self.root)), 23)
 
     def test_ticket_cannot_cross_user_or_hotel_and_expires(self):
         with patch.object(kb, "_native_search", return_value=[self.hit()]):
@@ -143,7 +173,7 @@ class SharedKnowledgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             kb.ticket_materials(self.root, old["ticket"], "oc_test_a", "ou_test_reader")
         self.assertTrue(kb.ticket_materials(self.root, new["ticket"], "oc_test_a", "ou_test_reader"))
-        with closing(sqlite3.connect(self.root / "retrieval_tickets.sqlite")) as con:
+        with closing(sqlite3.connect(self.root / "state/qa.sqlite")) as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM contexts").fetchone()[0], 1)
 
     def test_final_reply_appends_real_sources_and_respects_output_gate(self):

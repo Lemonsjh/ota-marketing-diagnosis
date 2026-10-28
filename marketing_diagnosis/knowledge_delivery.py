@@ -28,8 +28,8 @@ def finalize_answer(draft: str, ticket: str, *, db: Path, chat_id: str, sender_i
     try:
         materials = ticket_materials(release_root(), ticket, chat_id, sender_id)
         draft = draft.strip()
-        forbidden = r"```|publication_status|source_review|prepared_at|doc_id|(?:已|已经)(?:执行|写入|调价|降价|涨价|发布|删除|开通|关闭)"
-        if not draft or len(draft) > 1800 or re.search(forbidden, draft, re.I):
+        forbidden = r"```|publication_status|source_review|prepared_at|doc_id|memory/courses|release\.json|(?:已|已经)(?:执行|写入|调价|降价|涨价|发布|删除|开通|关闭)"
+        if not draft or len(draft) > 1800 or ticket in draft or re.search(forbidden, draft, re.I):
             return "知识回答未通过内容检查，请重新提出具体的课程问题。"
         references = list(dict.fromkeys(f"《{m['title']}》·{m['section']}" for m in materials))
         text = ("**运营知识参考**\n\n" + draft + "\n\n**课程来源**\n"

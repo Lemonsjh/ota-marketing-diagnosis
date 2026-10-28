@@ -23,7 +23,10 @@ PUBLIC_ROOT = Path("/var/lib/hotel-ota-ai/shared-knowledge/current")
 
 
 def is_knowledge_question(text: str) -> bool:
-    text = re.sub(r"\s+", "", str(text or ""))
+    text = str(text or "")
+    if len(text) > 2400:
+        return False
+    text = re.sub(r"\s+", "", text)
     if not text or len(text) > 1200:
         return False
     if text in {"知识库", "共享知识库", "知识问答", "课程咨询", "打开知识库"}:

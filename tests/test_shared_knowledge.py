@@ -163,7 +163,7 @@ class SharedKnowledgeTests(unittest.TestCase):
         with patch.object(kb, "_native_search", return_value=[self.hit()]):
             result = self.search()
         with patch("marketing_diagnosis.knowledge_delivery._gate", return_value=True):
-            for draft in ["publication_status=draft", "已执行降价", "```json\n{}\n```"]:
+            for draft in ["publication_status=draft", "已执行降价", "```json\n{}\n```", result["ticket"]]:
                 self.assertIn("未通过内容检查", finalize_answer(draft, result["ticket"], db=self.db,
                               chat_id="oc_test_a", sender_id="ou_test_reader"))
 

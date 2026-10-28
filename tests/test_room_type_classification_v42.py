@@ -57,7 +57,7 @@ class RoomTypeClassificationTests(unittest.TestCase):
         patch_room_type_summary(result, sections)
         item = result["items"][0]
 
-        self.assertEqual(item["source_table"], "hotel_puyue.jl11_room_type_classification")
+        self.assertEqual(item["source_table"], "jl11_room_type_classification")
         self.assertEqual(len(item["records"]), 3)
         low = next(record for record in item["records"] if record["room_type_name"] == "低效房")
         self.assertTrue(low["is_low"])
@@ -69,9 +69,31 @@ class RoomTypeClassificationTests(unittest.TestCase):
 
         fields = {field["label"]: field["value"] for field in item["fields"]}
         self.assertEqual(fields["全部在售房型数"], 3)
+        self.assertEqual(fields["房间总数"], 15)
         self.assertEqual(fields["低效房型数"], 1)
         self.assertAlmostEqual(fields["低效房型占比"], 1 / 3)
         self.assertEqual(item["item_score"], 0)
+
+    def test_current_pipeline_uses_summary_rows_for_both_channels(self):
+        from marketing_diagnosis.latest import process
+
+        result = process({"hotel_id": "test", "platform": "multi", "sections": {
+            "room_type_performance_daily": [
+                self._row("大床房", 0.80), self._row("双床房", 0.90),
+                {"room_type_name": "旧日度记录", "room_type_id": "old",
+                 "business_date": "2026-10-28", "room_count": 999,
+                 "occupancy_rate": 0.10, "revpar": 10},
+            ],
+        }})
+        meituan = next(item for item in result["visual_diagnosis"]["items"]
+                       if item["standard_item_id"] == 2)
+        for item in (meituan, result["ctrip_items"]["2"]):
+            self.assertEqual(item["source_table"], "jl11_room_type_classification")
+            fields = {field["label"]: field["value"] for field in item["fields"]}
+            self.assertEqual(fields["全部在售房型数"], 2)
+            self.assertEqual(fields["房间总数"], 10)
+            self.assertEqual(fields["低效房型数"], 0)
+            self.assertEqual(item["item_score"], 8)
 
     def test_missing_jl11_rows_are_mandatory_zero(self):
         result = self._result()

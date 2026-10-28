@@ -32,7 +32,7 @@ def finalize_answer(draft: str, ticket: str, *, chat_id: str, sender_id: str, ac
         if not draft or len(draft) > 1800 or ticket in draft or re.search(forbidden, draft, re.I):
             return "知识回答未通过内容检查，请重新提出具体的课程问题。"
         references = list(dict.fromkeys(f"《{m['title']}》·{m['section']}" for m in materials))
-        text = ("**运营知识参考**\n\n" + draft + "\n\n**课程来源**\n"
+        text = (draft + "\n\n**课程来源**\n"
                 + "\n".join(f"- {r}" for r in references)
                 + "\n\n仅作内部课程参考；课程案例不作为本店实时数据、现行平台规则或执行指令。")
         return text if _gate(text) else "知识回答未通过输出检查，请重新提出具体的课程问题。"

@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Export the 22 courses authorized on 2026-10-28 as pure Markdown."""
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from marketing_diagnosis.knowledge_corpus import export_courses
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--target", type=Path, required=True)
+    args = parser.parse_args()
+    manifest = export_courses(args.source, args.target)
+    print(json.dumps({"version": manifest["version"], "documents": len(manifest["documents"])}))
+
+
+if __name__ == "__main__":
+    main()

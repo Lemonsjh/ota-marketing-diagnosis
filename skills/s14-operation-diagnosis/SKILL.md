@@ -8,6 +8,8 @@ This skill is an OpenClaw wrapper. The business engine lives under `marketing_di
 
 ## When to use
 
+通用课程方法问答（例如“动态定价怎么做”“浏览多但订单少，应该先排查什么”）由 `hotel-shared-knowledge` Skill 处理，不进入本 Skill 的数据库 / Excel 选择。当前酒店实际经营事实不能用课程案例代替。
+
 Use this skill when the user asks for any of the following:
 
 - S14诊断

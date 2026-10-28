@@ -17,8 +17,8 @@ from runtime import S14OperationDiagnosis
 
 
 class DirectSkillSourceSelectionTest(unittest.TestCase):
-    def test_default_direct_invocation_returns_serializable_source_choice(self):
-        result = S14OperationDiagnosis({}).execute({})
+    def test_direct_invocation_with_explicit_hotel_returns_serializable_source_choice(self):
+        result = S14OperationDiagnosis({}).execute({"hotel_id": "test_hotel"})
 
         self.assertEqual(result["status"], "awaiting_source")
         self.assertEqual(result["platform"], "multi")
@@ -35,7 +35,7 @@ class DirectSkillSourceSelectionTest(unittest.TestCase):
 
     def test_explicit_source_selection_is_serializable(self):
         result = S14OperationDiagnosis({}).execute(
-            {"data_source_mode": "source_selection", "platform": "meituan"}
+            {"hotel_id": "test_hotel", "data_source_mode": "source_selection", "platform": "meituan"}
         )
 
         self.assertEqual(result["platform"], "multi")
@@ -44,7 +44,7 @@ class DirectSkillSourceSelectionTest(unittest.TestCase):
     def test_source_buttons_require_explicit_callback_configuration(self):
         result = S14OperationDiagnosis(
             {"feishu_card_callback_enabled": True}
-        ).execute({"data_source_mode": "source_selection"})
+        ).execute({"hotel_id": "test_hotel", "data_source_mode": "source_selection"})
 
         rendered = json.dumps(result["feishu_card"], ensure_ascii=False)
         self.assertIn('"tag": "action"', rendered)
@@ -53,13 +53,17 @@ class DirectSkillSourceSelectionTest(unittest.TestCase):
 
     def test_excel_pending_does_not_run_report(self):
         result = S14OperationDiagnosis({}).execute(
-            {"data_source_mode": "excel_pending"}
+            {"hotel_id": "test_hotel", "data_source_mode": "excel_pending"}
         )
 
         self.assertEqual(result["status"], "awaiting_excel")
         self.assertEqual(result["data_source"], "excel_pending")
         self.assertNotIn("report_url", result)
         json.dumps(result, ensure_ascii=False)
+
+    def test_missing_hotel_does_not_fall_back_to_a_production_hotel(self):
+        with self.assertRaisesRegex(ValueError, "hotel_id_required"):
+            S14OperationDiagnosis({}).execute({})
 
 
 if __name__ == "__main__":

@@ -25,6 +25,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from marketing_diagnosis.runtime_env import load_local_s14_env
+from marketing_diagnosis.shared_knowledge import is_knowledge_question, search_context
+from marketing_diagnosis.knowledge_delivery import finalize_answer
 from marketing_diagnosis.room_name_manual_v43 import (
     parse_room_type_names_from_text,
 )
@@ -46,6 +48,8 @@ TRIGGERS = (
 
 def _is_diagnosis_request(text: str) -> bool:
     """Recognize ordinary diagnosis requests without requiring a fixed command."""
+    if is_knowledge_question(text):
+        return False
     normalized = re.sub(r"[\s，,。.!！？?、：:]+", "", str(text or "")).lower()
     if not normalized or re.search(r"(?:不要|不用|取消|停止).{0,4}(?:诊断|分析|报告)", normalized):
         return False
@@ -735,6 +739,10 @@ def main() -> int:
     parser.add_argument("--report-current-db", action="store_true",
                         help="Report the DB the current group is bound to (per chat binding).")
     parser.add_argument("--make-template", action="store_true")
+    knowledge = parser.add_mutually_exclusive_group()
+    knowledge.add_argument("--knowledge-context", action="store_true", help="Internal course retrieval JSON; never forward it to Feishu.")
+    knowledge.add_argument("--knowledge-answer", default=None, help="Finalize a grounded draft through the Feishu output gate.")
+    parser.add_argument("--knowledge-ticket", default="", help="Retrieval ticket returned for the same chat and sender.")
     parser.add_argument(
         "--format",
         choices=("text", "card"),
@@ -761,6 +769,13 @@ def main() -> int:
         )
 
     try:
+        if args.knowledge_context:
+            result = search_context(args.text, db=AUTH_DB_PATH, chat_id=chat_id or "", sender_id=sender_id or "")
+            print(json.dumps(result, ensure_ascii=False))
+            return 0
+        if args.knowledge_answer is not None:
+            return _print(finalize_answer(args.knowledge_answer, args.knowledge_ticket,
+                          db=AUTH_DB_PATH, chat_id=chat_id or "", sender_id=sender_id or ""))
         if args.report_current_db:
             return _print(_report_current_db(chat_id))
 
@@ -873,7 +888,8 @@ def main() -> int:
             return _print(_result_payload(result, output_format))
 
         return _print(
-            "收到。需要生成酒店 OTA 诊断报告时，可以说「全面诊断」或「帮我做个经营分析」；"
+            "收到。可直接询问通用运营知识，例如「酒店动态定价怎么做」；"
+            "需要生成酒店 OTA 诊断报告时，可以说「全面诊断」或「帮我做个经营分析」；"
             "人工房型名称可发送「房型名称：五人战队套房、电竞双床房」；"
             "需要 Excel 填报模板时，请发送「Excel模板」。"
         )

@@ -33,7 +33,7 @@ the same source-selection flow. Do not require a fixed trigger phrase:
 4. For an Excel choice, invoke the Skill with `data_source_mode=excel_pending`, or call the same script with `--source-choice excel`, using the same chat and sender IDs.
 5. After Excel is selected, accept the same user's next `.xlsx` or `.xlsm` attachment in the same group without another @ mention. Download it locally and call the script with `--excel`, the same chat ID, the same sender ID, and `--format text`.
 6. The pending Excel state expires after 10 minutes. Do not run an attachment diagnosis unless the same chat and sender have selected Excel.
-7. Interactive-card callbacks are handled by `scripts/s14_feishu_card_callback.py`. It accepts only action `s14_source`, passes its validated `source` value to the diagnosis entry, and sends the resulting structured card directly with Feishu OpenAPI.
+7. Source selection uses typed replies through the existing OpenClaw Feishu message channel. Do not configure an independent HTTP card callback or show source-selection action buttons.
 8. After database or Excel diagnosis completes, send `feishu_message` exactly once when using exec/CLI. A dedicated structured adapter may request `--format card --raw-card-json`, parse the JSON, and send it through the channel API; its stdout must never be copied into chat. The result must contain the actual HTML report URL.
 
 Validated command pattern:

@@ -19,9 +19,5 @@ def project_environment():
         reader().project_environment()
 
 
-def view(kind):
-    return reader().view(kind) if os.environ.get("HOTEL_OTA_HOTEL_CONFIG_DIR") else None
-
-
 def hotel(hotel_id):
     return reader().profiles().get(hotel_id) if os.environ.get("HOTEL_OTA_HOTEL_CONFIG_DIR") else None

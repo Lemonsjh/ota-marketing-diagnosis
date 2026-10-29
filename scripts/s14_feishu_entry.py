@@ -98,7 +98,6 @@ HOTEL_ALIASES = {
     "维也纳": ("wyn", HOTEL_DISPLAY_NAMES["wyn"]),
     "维也纳酒店": ("wyn", HOTEL_DISPLAY_NAMES["wyn"]),
 }
-TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
 def _load_env_file() -> None:
@@ -113,15 +112,6 @@ def _load_env_file() -> None:
         key, _, value = line.partition("=")
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
     project_environment()
-
-
-def _card_callback_enabled() -> bool:
-    return (
-        str(os.environ.get("S14_FEISHU_CARD_CALLBACK_ENABLED") or "")
-        .strip()
-        .lower()
-        in TRUE_VALUES
-    )
 
 
 def _safe_id(value: str | None) -> str:
@@ -540,36 +530,15 @@ def _source_selection_card(manual_names: list[str] | None = None) -> dict[str, A
             },
         }
     ]
-    if _card_callback_enabled():
-        elements.append(
-            {
-                "tag": "action",
-                "actions": [
-                    {
-                        "tag": "button",
-                        "type": "primary",
-                        "text": {"tag": "plain_text", "content": "数据库"},
-                        "value": {"action": "s14_source", "source": "database"},
-                    },
-                    {
-                        "tag": "button",
-                        "type": "default",
-                        "text": {"tag": "plain_text", "content": "上传Excel"},
-                        "value": {"action": "s14_source", "source": "excel"},
-                    },
-                ],
-            }
-        )
-    else:
-        elements.append(
-            {
-                "tag": "div",
-                "text": {
-                    "tag": "lark_md",
-                    "content": "请直接回复 **数据库** 或 **上传Excel**。",
-                },
-            }
-        )
+    elements.append(
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": "请直接回复 **数据库** 或 **上传Excel**。",
+            },
+        }
+    )
 
     return {
         "msg_type": "interactive",
@@ -709,27 +678,6 @@ def _handle_source_choice(
         _source_selection_card(names)
         if output_format == "card"
         else SOURCE_SELECTION_TEXT
-    )
-
-
-def handle_card_source_choice(
-    source: str,
-    *,
-    chat_id: str,
-    sender_id: str,
-) -> dict[str, Any] | str:
-    """Run one trusted card source action and return a structured reply.
-
-    This is the public bridge used by the Feishu callback service. The returned
-    card remains an in-process object and must be sent through Feishu OpenAPI;
-    callers must never print or forward its serialized JSON as assistant text.
-    """
-    return _handle_source_choice(
-        source,
-        chat_id=chat_id,
-        sender_id=sender_id,
-        text="数据库" if source == "database" else "上传Excel",
-        output_format="card",
     )
 
 

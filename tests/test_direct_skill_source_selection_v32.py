@@ -41,15 +41,14 @@ class DirectSkillSourceSelectionTest(unittest.TestCase):
         self.assertEqual(result["platform"], "multi")
         json.dumps(result, ensure_ascii=False)
 
-    def test_source_buttons_require_explicit_callback_configuration(self):
+    def test_legacy_callback_setting_does_not_enable_buttons(self):
         result = S14OperationDiagnosis(
             {"feishu_card_callback_enabled": True}
         ).execute({"hotel_id": "test_hotel", "data_source_mode": "source_selection"})
 
         rendered = json.dumps(result["feishu_card"], ensure_ascii=False)
-        self.assertIn('"tag": "action"', rendered)
-        self.assertIn('"source": "database"', rendered)
-        self.assertIn('"source": "excel"', rendered)
+        self.assertNotIn('"tag": "action"', rendered)
+        self.assertIn("直接回复", rendered)
 
     def test_excel_pending_does_not_run_report(self):
         result = S14OperationDiagnosis({}).execute(

@@ -11,8 +11,6 @@ setup(
     install_requires=[
         "openpyxl>=3.1.0",
         "pymysql>=1.1.0",
-        "flask>=3.1.0,<4",
-        "lark-oapi>=1.7.1,<2",
     ],
     entry_points={"console_scripts": ["ota-marketing-diagnosis=marketing_diagnosis.main:main"]},
 )

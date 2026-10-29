@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 from marketing_diagnosis import hotel_profiles
 from scripts import s14_feishu_entry as entry
-from scripts import s14_feishu_card_callback as callback
 
 
 class SharedHotelProfileTest(unittest.TestCase):
@@ -23,5 +22,3 @@ class SharedHotelProfileTest(unittest.TestCase):
                 self.assertEqual(entry._config("a")["db_dsn"], profile["database"]["dsn"])
                 self.assertNotIn("db_dsn", entry._config("missing"))
                 self.assertEqual(entry._display_name("a"), "酒店甲")
-                self.assertEqual(callback._load_bot_credentials()["app-a"]["hotel_id"], "a")
-                self.assertEqual(hotel_profiles.view("s14_accounts")["bots"]["a-s14"]["app_id"], "app-a")

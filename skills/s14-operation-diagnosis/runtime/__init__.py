@@ -12,7 +12,6 @@ SKILL_ID = "s14-operation-diagnosis"
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[1]
 DEFAULT_REPORT_ROOT = Path("/var/lib/ota-marketing-diagnosis/reports")
-TRUE_VALUES = {"1", "true", "yes", "on"}
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -35,13 +34,6 @@ def _safe_segment(value: Any, fallback: str) -> str:
     text = str(value or fallback).strip().lower()
     text = re.sub(r"[^a-z0-9._-]+", "-", text)
     return text.strip("-._") or fallback
-
-
-def _card_callback_enabled(config: dict[str, Any] | None = None) -> bool:
-    configured = os.environ.get("S14_FEISHU_CARD_CALLBACK_ENABLED")
-    if configured is None:
-        configured = (config or {}).get("feishu_card_callback_enabled")
-    return str(configured or "").strip().lower() in TRUE_VALUES
 
 
 def _json_safe(value: Any) -> Any:
@@ -146,42 +138,15 @@ def _source_selection_result(
             },
         }
     ]
-    if _card_callback_enabled(config):
-        elements.append(
-            {
-                "tag": "action",
-                "actions": [
-                    {
-                        "tag": "button",
-                        "type": "primary",
-                        "text": {"tag": "plain_text", "content": "数据库"},
-                        "value": {
-                            "action": "s14_source",
-                            "source": "database",
-                        },
-                    },
-                    {
-                        "tag": "button",
-                        "type": "default",
-                        "text": {"tag": "plain_text", "content": "上传Excel"},
-                        "value": {
-                            "action": "s14_source",
-                            "source": "excel",
-                        },
-                    },
-                ],
-            }
-        )
-    else:
-        elements.append(
-            {
-                "tag": "div",
-                "text": {
-                    "tag": "lark_md",
-                    "content": "请直接回复 **数据库** 或 **上传Excel**。",
-                },
-            }
-        )
+    elements.append(
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": "请直接回复 **数据库** 或 **上传Excel**。",
+            },
+        }
+    )
 
     card = {
         "msg_type": "interactive",

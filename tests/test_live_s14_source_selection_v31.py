@@ -56,18 +56,11 @@ class LiveS14SourceSelectionTest(unittest.TestCase):
         self.assertIn("直接回复", fallback["text"]["content"])
         self.assertNotIn('"tag": "action"', json.dumps(card, ensure_ascii=False))
 
-    def test_trigger_card_adds_buttons_only_when_callback_is_enabled(self) -> None:
+    def test_retired_callback_flag_cannot_reenable_buttons(self) -> None:
         os.environ["S14_FEISHU_CARD_CALLBACK_ENABLED"] = "1"
         card = self.module._source_selection_card()
-        actions = card["card"]["elements"][1]["actions"]
-        labels = [action["text"]["content"] for action in actions]
-        sources = [action["value"]["source"] for action in actions]
-
-        self.assertEqual(labels, ["数据库", "上传Excel"])
-        self.assertEqual(sources, ["database", "excel"])
-        rendered = str(card)
-        self.assertNotIn("携程 / 美团", rendered)
-        self.assertNotIn("选择渠道", rendered)
+        self.assertNotIn('"tag": "action"', json.dumps(card, ensure_ascii=False))
+        self.assertIn("直接回复", str(card))
 
     def test_all_text_variants_use_unified_multi_platform(self) -> None:
         with (

@@ -200,6 +200,11 @@ def _load_bot_credentials() -> dict[str, dict[str, str]]:
     except (OSError, ValueError, TypeError):
         data = {}
 
+    from marketing_diagnosis.hotel_profiles import view, project_environment
+    unified = view("s14_accounts")
+    if unified is not None:
+        data = unified
+        project_environment()
     bots = data.get("bots") or {}
     if bots:
         for account_id, info in bots.items():

@@ -102,7 +102,9 @@ TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
 def _load_env_file() -> None:
+    from marketing_diagnosis.hotel_profiles import project_environment
     if not ENV_FILE.exists():
+        project_environment()
         return
     for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -110,6 +112,7 @@ def _load_env_file() -> None:
             continue
         key, _, value = line.partition("=")
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    project_environment()
 
 
 def _card_callback_enabled() -> bool:
@@ -234,6 +237,13 @@ def _config(hotel_id: str | None = None) -> dict[str, Any]:
         cfg["public_base_url"] = os.environ["S14_PUBLIC_BASE_URL"]
     if os.environ.get("S14_CTRIP_HOTEL_ID"):
         cfg["ctrip_hotel_id"] = os.environ["S14_CTRIP_HOTEL_ID"]
+    if hotel_id and os.environ.get("HOTEL_OTA_HOTEL_CONFIG_DIR"):
+        from marketing_diagnosis.hotel_profiles import reader
+        value = reader().dsn(hotel_id, "s14")
+        cfg.pop("db_dsn", None)
+        cfg["db_dsn_env"] = "S14_DB_DSN_" + str(hotel_id).upper().replace("-", "_")
+        if value:
+            cfg["db_dsn"] = value
     return cfg
 
 
@@ -278,7 +288,7 @@ def _report_current_db(chat_id: str | None) -> str:
     dsn = os.environ.get(dsn_env) or _config(hotel_id).get("db_dsn")
     # A bound hotel without a dedicated *_{HOTEL} DSN (e.g. puyue) legitimately
     # uses the default S14_DB_DSN. Only UNBOUND groups must not fall back.
-    if not dsn:
+    if not dsn and not os.environ.get("HOTEL_OTA_HOTEL_CONFIG_DIR"):
         dsn = os.environ.get("S14_DB_DSN")
     if not dsn:
         return f"未配置 {dsn_env}，无法确认数据库。"
@@ -337,6 +347,10 @@ def _bound_hotel_id(chat_id: str | None) -> str | None:
 
 
 def _display_name(hotel_id: str) -> str:
+    from marketing_diagnosis.hotel_profiles import hotel
+    item = hotel(hotel_id)
+    if item:
+        return item["name"]
     return HOTEL_DISPLAY_NAMES.get(hotel_id, hotel_id)
 
 

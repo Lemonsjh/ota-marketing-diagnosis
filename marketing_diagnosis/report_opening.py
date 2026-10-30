@@ -14,7 +14,7 @@ STYLE = """<style id='REPORT_OPENING_STYLE'>
 .report-opening .card-title h3{font-size:clamp(26px,2.3cqw,34px);line-height:1.4;font-weight:750}
 .report-opening .card-title p{font-size:16px;line-height:1.6;margin-top:8px;color:#66788a}
 .report-opening .result-area{padding:20px 36px 28px}
-.opening-review{display:grid;grid-template-columns:1.05fr .95fr repeat(var(--opening-platforms),1.05fr);align-items:center;gap:28px;padding:6px 0 10px}
+.opening-review{display:grid;grid-template-columns:1.05fr .95fr repeat(var(--opening-platforms),1.05fr);align-items:end;gap:28px;padding:6px 0 10px}
 .opening-review>div+div{border-left:1px solid #e1e8ec;padding-left:28px}
 .opening-rate strong{display:block;color:#008563;font-size:clamp(48px,6cqw,80px);line-height:1.2;letter-spacing:-2px;font-variant-numeric:tabular-nums}
 .opening-rate small{display:block;margin-top:8px;font-size:16px;color:#637589}

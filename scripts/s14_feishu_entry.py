@@ -237,61 +237,6 @@ def _config(hotel_id: str | None = None) -> dict[str, Any]:
     return cfg
 
 
-def _parse_dsn(dsn: str | None) -> tuple[str, str, str, str]:
-    """Extract (db_name, host, port, charset) from a SQLAlchemy/MySQL DSN.
-
-    DSN shapes supported:
-      mysql+pymysql://user:pass@host:port/db?charset=utf8mb4
-      mysql://user:pass@host:port/db
-    Credentials are never returned.
-    """
-    match = re.match(
-        r"^[^:]+://(?:[^:@/]*:?[^@/]*@)?([^:/]+):(\d+)/([^?/]+)(?:\?(.*))?$",
-        dsn or "",
-    )
-    if not match:
-        return ("(未解析)", "", "", "")
-    host, port, db_name = match.group(1), match.group(2), match.group(3)
-    charset = ""
-    query = match.group(4) or ""
-    cm = re.search(r"charset=([^&\s]+)", query)
-    if cm:
-        charset = cm.group(1)
-    return db_name, host, port, charset
-
-
-def _report_current_db(chat_id: str | None) -> str:
-    """Deterministically report the DB the current Feishu group is bound to.
-
-    Resolution is strictly driven by the active group binding
-    (chat_bindings / group_chat_bindings) -> hotel_id -> S14_DB_DSN_{HOTEL_ID}
-    (e.g. S14_DB_DSN_ZHITING = hotel_zhiting). Never silently fall back to the
-    default S14_DB_DSN: an unbound/missing group must error, not lie about the
-    library.
-    """
-    if not chat_id:
-        return "无法确定当前群，请带上 --chat-id（当前群的 chat_id）。"
-    hotel_id = _bound_hotel_id(chat_id)
-    if not hotel_id:
-        return "当前群未绑定酒店，无法确认数据库。"
-    dsn_env = f"S14_DB_DSN_{str(hotel_id).upper().replace('-', '_')}"
-    dsn = os.environ.get(dsn_env) or _config(hotel_id).get("db_dsn")
-    # A bound hotel without a dedicated *_{HOTEL} DSN (e.g. puyue) legitimately
-    # uses the default S14_DB_DSN. Only UNBOUND groups must not fall back.
-    if not dsn and not os.environ.get("HOTEL_OTA_HOTEL_CONFIG_DIR"):
-        dsn = os.environ.get("S14_DB_DSN")
-    if not dsn:
-        return f"未配置 {dsn_env}，无法确认数据库。"
-    db_name, host, port, charset = _parse_dsn(dsn)
-    label = _display_name(hotel_id)
-    char_note = f"，字符集 {charset}" if charset else ""
-    port_note = f":{port}" if port else ""
-    return (
-        f"当前连接的是本地 MySQL，库名是 {db_name}（{host}{port_note}{char_note}，只读）。"
-        f"对应酒店：{label}。"
-    )
-
-
 def _output_root() -> str:
     return os.environ.get("S14_REPORT_OUTPUT_DIR") or "/var/lib/ota-marketing-diagnosis/reports"
 
@@ -700,8 +645,6 @@ def main() -> int:
     parser.add_argument("--account-id", default=os.environ.get("FEISHU_ACCOUNT_ID", ""),
                         help="Trusted receiving S14 bot account; required for shared course questions.")
     parser.add_argument("--source-choice", default="")
-    parser.add_argument("--report-current-db", action="store_true",
-                        help="Report the DB the current group is bound to (per chat binding).")
     parser.add_argument("--make-template", action="store_true")
     knowledge = parser.add_mutually_exclusive_group()
     knowledge.add_argument("--knowledge-context", action="store_true", help="Internal course retrieval JSON; never forward it to Feishu.")
@@ -740,9 +683,6 @@ def main() -> int:
         if args.knowledge_answer is not None:
             return _print(finalize_answer(args.knowledge_answer, args.knowledge_ticket,
                           chat_id=chat_id or "", sender_id=sender_id or "", account_id=args.account_id))
-        if args.report_current_db:
-            return _print(_report_current_db(chat_id))
-
         if args.make_template or _is_template_request(args.text):
             return _print(_template_reply())
 

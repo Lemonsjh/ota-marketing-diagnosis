@@ -92,6 +92,20 @@ class LiveS14SourceSelectionTest(unittest.TestCase):
         self.assertIn("请选择数据来源", stdout.getvalue())
         self.assertEqual(self.module._get_flow_state("chat-nl", "user-nl")["state"], "awaiting_source")
 
+    def test_retired_database_details_command_is_rejected_before_config_loading(self) -> None:
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with (
+            patch.object(sys, "argv", [str(SCRIPT), "--report-current-db"]),
+            patch.object(self.module, "_load_env_file") as load_config,
+            contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
+            self.assertRaises(SystemExit) as stopped,
+        ):
+            self.module.main()
+        self.assertEqual(stopped.exception.code, 2)
+        self.assertEqual(stdout.getvalue(), "")
+        load_config.assert_not_called()
+
     def test_excel_wait_state_is_scoped_to_chat_and_sender(self) -> None:
         self.module._set_flow_state(
             "awaiting_excel",

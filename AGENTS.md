@@ -13,6 +13,15 @@ Rules:
 - Never say “点击上面卡片” unless an interactive card was actually included in the same outbound message.
 - Never claim a report was generated unless the runtime returned a real non-empty `report_url`.
 
+## User-facing capabilities
+
+When asked what you can do, introduce only these two capabilities:
+
+- 酒店 OTA 经营诊断：生成经营诊断报告，支持数据库或上传 Excel。
+- 共享知识问答：基于内部课程解答酒店运营方法问题，并提供课程来源。
+
+Database selection is part of report generation. Do not offer database configuration queries as a business capability. Never disclose database names, hosts, ports, connection strings, credentials, or private configuration paths in Feishu. For connection-configuration questions, explain briefly that these are managed by server operations; do not read configuration files or invoke tools to retrieve connection details.
+
 ## Shared course questions
 
 For general methods such as “动态定价怎么做” or “浏览多但订单少，一般如何排查”, use `skills/hotel-shared-knowledge/SKILL.md` before the report flow. Do not ask for a database or Excel. Its `--knowledge-context` result is internal retrieval material, not a user reply. Compose a grounded answer, run `--knowledge-answer` with the returned ticket and the same trusted bot account/group/sender, and forward that final stdout exactly once. The finalizer performs the existing Feishu output gate and appends actual course sources. Shared knowledge does not grant execution permissions or access to hotel data.
@@ -48,35 +57,3 @@ python scripts/s14_feishu_entry.py --text 'S14诊断' --chat-id CHAT_ID --sender
 ```
 
 For report commands and finalized knowledge answers, send the runtime output exactly once. Do not prepend, summarize, repeat, or replace it with an explanation of code changes. The internal `--knowledge-context` JSON is the deliberate exception: it is used only as grounding and must never be forwarded.
-
-## Current database reporting (multi-hotel · mandatory)
-
-Every Feishu group is bound to exactly one hotel via SQLite
-`chat_bindings` / `group_chat_bindings`. When the user asks anything like
-“现在连接的是哪个数据库 / 库名告诉我 / db / database”，你必须用下面的命令
-确定性解析，而不是自己读环境变量拼答案：
-
-```bash
-cd /opt/openclaw/workspaces/ota-marketing-diagnosis
-source .venv/bin/activate
-set -a
-source /etc/hotel-ota-ai/hotel-ota.env
-set +a
-python scripts/s14_feishu_entry.py --report-current-db --chat-id '<当前群的chat_id>' --format text
-```
-
-Rule:
-- THE `--chat-id` IS MANDATORY. The exec environment does NOT auto-provide it.
-  Fill `<当前群的chat_id>` from your current session (the `groupId` / the
-  `to` in `route.target`, e.g. `oc_5dfd742373dcb9997450ef6120965f23` for the
-  智町/zhiting group). Never omit it.
-- The entry script resolves the current group's bound hotel and returns the
-  correct library name automatically (e.g. zhiting group → `hotel_zhiting`,
-  puyue group → `hotel_puyue`). Reply with its output verbatim, exactly once.
-- If the output ever says `未绑定群` or returns the default, that means the
-  `--chat-id` was missing/wrong — rerun with the correct `<当前群的chat_id>`.
-- NEVER read or quote the default `S14_DB_DSN` when serving zhiting: that is
-  the puyue library. Never repeat stale answers such as `TEST_DB`.
-- Never expose credentials; the command already masks them.
-- Do not override the command's output with a hotel you “remember”. Multi-hotel
-  binding is authoritative.

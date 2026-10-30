@@ -117,7 +117,7 @@ class ReportOpeningTests(unittest.TestCase):
         rows[0]["metric_value"] = None
         self.assertIsNone(order_point(rows, "meituan")["own_orders"])
 
-    def test_no_score_change_and_only_one_opening_before_diagnosis(self):
+    def test_no_score_change_and_opening_between_overview_and_summary(self):
         original = process(normalize_dataset({}))
         data = normalize_dataset({"report_opening": opening()})
         result = process(data)
@@ -125,8 +125,12 @@ class ReportOpeningTests(unittest.TestCase):
         self.assertEqual(original["ctrip_items"], result["ctrip_items"])
         result.update(hotel_id="audit", hotel_name="测试酒店", period_start="2026-10-01", period_end="2026-10-30")
         document = build_html(result)
-        self.assertEqual(document.count("class='report-opening'"), 1)
-        self.assertLess(document.index("class='report-opening'"), document.index("id='rule-1'"))
+        self.assertEqual(document.count("class='report-opening'"), 2)
+        for prefix in ("", "ctrip-"):
+            overview = document.index("id='" + prefix + "overview'")
+            opening_index = document.index("class='report-opening'", overview)
+            self.assertLess(overview, opening_index)
+            self.assertLess(opening_index, document.index("id='" + prefix + "summary'"))
         self.assertIn("37.50%", document)
         self.assertEqual(patch_opening_html(document, result), document)
         self.assertIn("昨日点评率", build_markdown(result))

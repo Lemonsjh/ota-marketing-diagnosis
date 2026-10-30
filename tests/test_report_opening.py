@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from marketing_diagnosis.db_loader import DEFAULT_MYSQL_TABLES
 from marketing_diagnosis.latest import normalize_dataset, process
-from marketing_diagnosis.report_opening import patch_opening_html
+from marketing_diagnosis.report_opening import patch_opening_html, _chart
 from marketing_diagnosis.report_opening_data import load_opening, order_point, order_totals
 from marketing_diagnosis.reporting_current import build_html, build_markdown
 
@@ -59,6 +59,16 @@ def opening(cursor=None):
 
 
 class ReportOpeningTests(unittest.TestCase):
+    def test_share_chart_breaks_at_missing_day_and_empty_history(self):
+        import xml.etree.ElementTree as ET
+
+        points = [{"business_date": f"2026-10-{day}", "share": share}
+                  for day, share in [(23, .02), (24, None), (25, .03)]]
+        chart = ET.fromstring(_chart(points, "合计", "test-fill"))
+        self.assertEqual(len(chart.findall("polyline")), 2)
+        self.assertEqual(len(chart.findall("circle")), 2)
+        self.assertIn("暂无数据", _chart([], "合计", "test-fill"))
+
     def test_rates_and_weighted_platform_totals(self):
         result = opening()
         self.assertFalse(result["participates_in_score"])

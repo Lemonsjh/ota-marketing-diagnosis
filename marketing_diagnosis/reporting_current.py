@@ -15,6 +15,7 @@ from marketing_diagnosis.ctrip_manual_listing import patch_html
 from marketing_diagnosis.ctrip_page_entry_compact import patch_page_entry_html
 from marketing_diagnosis.meituan_market_report import patch_market_html
 from marketing_diagnosis.meituan_recent_reviews import patch_recent_reviews_html
+from marketing_diagnosis.report_opening import patch_opening_html, opening_markdown
 from marketing_diagnosis.manual_supplement import patch_manual_supplements
 from marketing_diagnosis.visual_diagnosis import patch_video_upload_copy
 from marketing_diagnosis.reporting_runtime_v52 import (
@@ -49,30 +50,30 @@ def _compact_business_travel(document: str) -> str:
 
 
 def build_ctrip_html(result: dict[str, Any]) -> str:
-    return patch_manual_supplements(
+    return patch_opening_html(patch_manual_supplements(
         patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_ctrip_html(result)), result), result)), result),
         result,
-    )
+    ), result)
 
 
 def build_dual_channel_html(result: dict[str, Any]) -> str:
-    return patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
+    return patch_opening_html(patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
         patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_dual_channel_html(result)), result), result)), result),
         result,
-    ), result), result)
+    ), result), result), result)
 
 
 def build_html(result: dict[str, Any]) -> str:
-    return patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
+    return patch_opening_html(patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
         patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_html(result)), result), result)), result),
         result,
-    ), result), result)
+    ), result), result), result)
 
 
 def build_meituan_html(result: dict[str, Any]) -> str:
-    return patch_recent_reviews_html(
+    return patch_opening_html(patch_recent_reviews_html(
         patch_market_html(patch_channel_score_totals(_build_meituan_html(result), result), result), result,
-    )
+    ), result)
 
 
 def build_markdown(result: dict[str, Any]) -> str:
@@ -80,7 +81,7 @@ def build_markdown(result: dict[str, Any]) -> str:
     from marketing_diagnosis.meituan_exposure_monthly import _find_item
     from marketing_diagnosis.meituan_market_report import _num, _pct
 
-    document = _build_markdown(result).replace("曝光数据分析", TITLE)
+    document = opening_markdown(result) + _build_markdown(result).replace("曝光数据分析", TITLE)
     item = _find_item((result.get("visual_diagnosis") or {}).get("items"), 3)
     if not item or "market_share" not in item:
         return document

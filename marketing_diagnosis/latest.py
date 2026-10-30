@@ -23,6 +23,8 @@ from marketing_diagnosis.reporting_current import (
 def normalize_dataset(raw):
     """Preserve Ctrip-specific records required by the final scoring rules."""
     result = _normalize_dataset(raw)
+    if isinstance(raw.get("report_opening"), dict):
+        result["report_opening"] = raw["report_opening"]
     sections = result.setdefault("sections", {})
     diagnostics = result.setdefault("diagnostics", {})
     for section in (

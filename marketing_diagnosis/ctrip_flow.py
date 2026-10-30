@@ -249,16 +249,19 @@ def load_mysql_dsn_dataset(
         period_end=period_end,
     )
 
-    if "ctrip" not in base._enabled_platforms(platform):
-        dataset.setdefault("ctrip_business_metrics_funnel", [])
-        dataset.setdefault("ctrip_promotion_activity", [])
-        dataset.setdefault("ctrip_promotion_activity_performance", [])
-        dataset.setdefault("ctrip_video_upload_status", [])
-        return dataset
-
     ctrip_id = ctrip_hotel_id or hotel_id
     with base._connect_mysql(dsn) as conn:
         with conn.cursor() as cursor:
+            from marketing_diagnosis.report_opening_data import load_opening
+
+            dataset["report_opening"] = load_opening(
+                cursor, table_map, hotel_id, ctrip_id, base._enabled_platforms(platform),
+            )
+            if "ctrip" not in base._enabled_platforms(platform):
+                for section in ("ctrip_business_metrics_funnel", "ctrip_promotion_activity",
+                                "ctrip_promotion_activity_performance", "ctrip_video_upload_status"):
+                    dataset.setdefault(section, [])
+                return dataset
             rows, diag = _load_flow_rows(
                 cursor,
                 table_map["ctrip_flow_conversion_30d"],

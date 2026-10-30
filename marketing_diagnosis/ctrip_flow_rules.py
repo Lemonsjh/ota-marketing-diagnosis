@@ -136,6 +136,8 @@ def process(data: dict[str, Any]) -> dict[str, Any]:
     """Apply final Ctrip rule corrections after the established rule pipeline."""
 
     result = upstream_process(data)
+    if isinstance(data.get("report_opening"), dict):
+        result["report_opening"] = data["report_opening"]
     sections = data.get("sections") or {}
     patch_market_share(result, sections, hotel_id=data.get("hotel_id"))
     attach_recent_reviews(result, data)

@@ -65,13 +65,14 @@ def opening_html(payload):
     for label, points, aggregate in [("合计", orders["daily_totals"], True),
                                     *[(LABELS[row["platform"]], row["daily_points"], False) for row in orders["platforms"]]]:
         rows = []
-        for point in points:
-            row = [point["business_date"][5:], _num(point["own_orders"])]
-            if not aggregate:
-                row.append(f"{_num(point['merchant_count'])} × {_num(point['peer_average'])}")
-            row += [_num(point["market_orders"]), _pct(point["share"])]
+        by_date = {point["business_date"]: point for point in points}
+        for total_point in orders["daily_totals"]:
+            day = total_point["business_date"]
+            point = by_date.get(day, {})
+            row = [day[5:]] if aggregate else []
+            row += [_num(point.get("own_orders")), _num(point.get("market_orders")), _pct(point.get("share"))]
             rows.append(row)
-        headers = ["日期", "本店订单"] + ([] if aggregate else ["商家数×均值"]) + ["竞争圈订单", "本店占比"]
+        headers = (["日期"] if aggregate else []) + ["本店订单", "竞争圈订单", "本店占比"]
         groups.append(f"<div class='opening-order-group'><h4>{_text(label)}</h4>"
                       + (_table(headers, rows) if rows else "<p>暂无数据</p>") + "</div>")
     order = (f"<article class='diagnosis-card'><div class='card-top'><div class='card-title'><h3>近7天订单与商圈占比</h3><p>{_text(payload['order_period_start'])} 至 {_text(payload['order_period_end'])} · 每日全日订单</p></div></div>"

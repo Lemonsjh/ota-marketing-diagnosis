@@ -92,6 +92,14 @@ def _checkouts(cursor, table, hotel_id, yesterday, today, now):
         # Unattributed orders may belong to either OTA; exact platform totals are unknown.
         if any(int(row["count"]) > 0 and platform_key(row["order_source"]) is None for row in rows):
             counts = dict.fromkeys(PLATFORMS)
+    if "member_level" in columns:
+        source = "LOWER(order_source)" if "order_source" in columns else "''"
+        patterns = ("%美团%", "%大众点评%", "%meituan%", "%dianping%")
+        matches = [f"{source} LIKE %s"] * len(patterns) + ["TRIM(member_level)=%s"]
+        rows = _query(cursor,
+            f"SELECT COUNT(DISTINCT {valid_order}) AS count FROM {_safe_identifier(table)} "
+            f"WHERE {where} AND ({' OR '.join(matches)})", [*params, *patterns, "美团"])
+        counts["meituan"] = int(rows[0]["count"])
     return {"total": int(total), **counts}
 
 

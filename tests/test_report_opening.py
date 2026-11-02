@@ -129,6 +129,14 @@ class ReportOpeningTests(unittest.TestCase):
                 conn.execute("UPDATE jd02 SET order_source='中介直连' WHERE order_id IN ('e','f')")
                 counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
                 self.assertEqual(counts, {"total": 6, "meituan": None, "ctrip": None})
+                conn.execute("ALTER TABLE jd02 ADD COLUMN member_level")
+                columns.add("member_level")
+                conn.execute("UPDATE jd02 SET member_level='美团' WHERE order_id IN ('b','e','x','y','z','g','')")
+                conn.execute("INSERT INTO jd02 VALUES (30,'audit','2026-10-29','退房','e',"
+                             "'中介直连','2026-10-30 15:30:00',NULL)")
+                counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
+                # Source-only a, both-fields b and membership-only e count once each.
+                self.assertEqual(counts, {"total": 6, "meituan": 3, "ctrip": None})
 
     def test_missing_order_dates_are_not_filled_or_counted_as_zero(self):
         def point(day, own, market):

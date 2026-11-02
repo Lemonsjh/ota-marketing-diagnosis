@@ -103,6 +103,20 @@ def _checkouts(cursor, table, hotel_id, yesterday, today, now):
     return {"total": int(total), **counts}
 
 
+def _pms_source(cursor, table, hotel_id, now):
+    columns = _columns(cursor, table, {"hotel_id", "source_platform"})
+    where, params, order = "hotel_id=%s", [hotel_id], []
+    if "snapshot_time" in columns:
+        where += " AND snapshot_time<=%s"
+        params.append(str(now))
+        order.append("snapshot_time DESC")
+    if "id" in columns:
+        order.append("id DESC")
+    sort = " ORDER BY " + ",".join(order) if order else ""
+    rows = _query(cursor, f"SELECT source_platform FROM {_safe_identifier(table)} WHERE {where}{sort} LIMIT 1", params)
+    return str(rows[0].get("source_platform") or "").strip() if rows else None
+
+
 def _ctrip_checkouts(cursor, table, hotel_id, yesterday, today, now):
     columns = _columns(cursor, table, {"hotel_id", "order_id", "departure_date", "order_status", "order_status_type"})
     where = "hotel_id=%s AND departure_date>=%s AND departure_date<%s AND order_status=%s AND order_status_type=%s"
@@ -217,11 +231,19 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
     tomorrow = (now.date() + dt.timedelta(days=1)).isoformat()
     diagnostics = []
     platforms = _enabled(cursor, hotel_id, requested, diagnostics)
+    guest_table = tables.get("guest_stay_detail", "jd02_guest_stay_detail")
     checkouts = dict.fromkeys(("total", *PLATFORMS))
     try:
-        checkouts = _checkouts(cursor, tables.get("guest_stay_detail", "jd02_guest_stay_detail"), hotel_id, yesterday, today, now)
+        checkouts = _checkouts(cursor, guest_table, hotel_id, yesterday, today, now)
     except Exception as exc:
         diagnostics.append("checkouts_unavailable:" + type(exc).__name__)
+    source = None
+    if "ctrip" in platforms:
+        try:
+            source = _pms_source(cursor, guest_table, hotel_id, now)
+        except Exception as exc:
+            diagnostics.append("pms_source_unavailable:" + type(exc).__name__)
+    ctrip_ota = source in {"PMS（美团）", "PMS（别样红）"}
     reviews, orders = [], []
     for platform in platforms:
         scoped_id = ctrip_hotel_id if platform == "ctrip" else hotel_id
@@ -231,7 +253,7 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
         except Exception as exc:
             diagnostics.append(platform + "_reviews_unavailable:" + type(exc).__name__)
         denominator = checkouts[platform]
-        if platform == "ctrip":
+        if platform == "ctrip" and ctrip_ota:
             denominator = None
             try:
                 denominator = _ctrip_checkouts(cursor, tables.get("ctrip_order_detail", "ctrip_ota_order_detail"),
@@ -248,7 +270,7 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
             points = []
         orders.append({"platform": platform, "daily_points": points})
     review_total = _sum([row["review_count"] for row in reviews])
-    checkout_total = _sum([row["checkout_orders"] for row in reviews])
+    checkout_total = _sum([row["checkout_orders"] for row in reviews]) if ctrip_ota else checkouts["total"]
     return {"as_of": str(now), "checkout_date": yesterday, "review_date": today,
             "order_period_start": order_start, "order_period_end": yesterday, "participates_in_score": False,
             "reviews": {"platforms": reviews, "total": {"review_count": review_total,

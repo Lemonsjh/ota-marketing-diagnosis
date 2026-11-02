@@ -15,8 +15,9 @@ NOW = dt.datetime(2026, 10, 30, 16)
 
 
 class Cursor:
-    def __init__(self, disabled=False, missing=False, zero=False):
+    def __init__(self, disabled=False, missing=False, zero=False, pms_source="PMS（住哲）"):
         self.disabled, self.missing, self.zero = disabled, missing, zero
+        self.pms_source = pms_source
         self.calls = []
         self.rows = []
 
@@ -29,12 +30,14 @@ class Cursor:
                       "order_source", "snapshot_time", "review_time", "review_id",
                       "metric_code", "metric_value", "metric_unit", "peer_average",
                       "competitor_rank", "competition_circle_hotel_count", "departure_date",
-                      "order_status", "order_status_type"}
+                      "order_status", "order_status_type", "source_platform"}
             self.rows = [{"Field": field} for field in fields]
         elif "FROM hotels" in sql:
             self.rows = [{"config_json": {"channels": ["meituan"] if self.disabled else ["meituan", "ctrip"]}}]
         elif "ROW_NUMBER()" in sql:
             self.rows = [] if self.zero else [{"order_source": "美团", "count": 2}, {"order_source": "携程", "count": 1}]
+        elif sql.startswith("SELECT source_platform"):
+            self.rows = [{"source_platform": self.pms_source}]
         elif "jd02" in sql:
             self.rows = [{"count": 0 if self.zero else 3}]
         elif "ctrip_ota_order_detail" in sql:
@@ -86,7 +89,7 @@ class ReportOpeningTests(unittest.TestCase):
         self.assertEqual(result["review_date"], "2026-10-30")
 
     def test_sql_has_exact_scope_dates_status_and_order_dedup(self):
-        cursor = Cursor()
+        cursor = Cursor(pms_source="PMS（美团）")
         opening(cursor)
         checkout = next((s, p) for s, p in cursor.calls if "ROW_NUMBER()" in s)
         self.assertIn("PARTITION BY order_id", checkout[0])
@@ -154,14 +157,21 @@ class ReportOpeningTests(unittest.TestCase):
                         raise RuntimeError("ota_unavailable")
                     self.rows = [{"count": 7}]
 
-        result = opening(OTACursor())
-        ctrip = result["reviews"]["platforms"][1]
-        self.assertEqual(ctrip["checkout_orders"], 7)
-        self.assertEqual(ctrip["rate"], 1 / 7)
-        self.assertEqual(result["reviews"]["total"]["checkout_orders"], 9)
-        self.assertEqual(result["reviews"]["total"]["rate"], 3 / 9)
+        for source in ("PMS（美团）", "PMS（别样红）"):
+            result = opening(OTACursor(pms_source=source))
+            ctrip = result["reviews"]["platforms"][1]
+            self.assertEqual(ctrip["checkout_orders"], 7)
+            self.assertEqual(ctrip["rate"], 1 / 7)
+            self.assertEqual(result["reviews"]["total"]["checkout_orders"], 9)
+            self.assertEqual(result["reviews"]["total"]["rate"], 3 / 9)
 
-        cursor = OTACursor()
+        cursor = OTACursor(pms_source="PMS（住哲）")
+        result = opening(cursor)
+        self.assertEqual(result["reviews"]["platforms"][1]["checkout_orders"], 1)
+        self.assertEqual(result["reviews"]["total"]["checkout_orders"], 3)
+        self.assertFalse(any("ctrip_ota_order_detail" in sql for sql, _ in cursor.calls))
+
+        cursor = OTACursor(pms_source="PMS（美团）")
         cursor.unavailable = True
         result = opening(cursor)
         self.assertIsNone(result["reviews"]["platforms"][1]["checkout_orders"])

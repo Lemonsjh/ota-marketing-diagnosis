@@ -1,12 +1,13 @@
 import copy
 import datetime as dt
+import sqlite3
 import unittest
 from unittest.mock import patch
 
 from marketing_diagnosis.db_loader import DEFAULT_MYSQL_TABLES
 from marketing_diagnosis.latest import normalize_dataset, process
 from marketing_diagnosis.report_opening import patch_opening_html, _chart
-from marketing_diagnosis.report_opening_data import load_opening, order_point, order_totals
+from marketing_diagnosis.report_opening_data import _checkouts, load_opening, order_point, order_totals
 from marketing_diagnosis.reporting_current import build_html, build_markdown
 
 
@@ -87,13 +88,44 @@ class ReportOpeningTests(unittest.TestCase):
         checkout = next((s, p) for s, p in cursor.calls if "ROW_NUMBER()" in s)
         self.assertIn("PARTITION BY order_id", checkout[0])
         self.assertIn("hotel_id=%s", checkout[0])
-        self.assertEqual(checkout[1][:4], ("audit", "2026-10-29", "2026-10-30", "已退房"))
+        self.assertEqual(checkout[1][:5], ("audit", "2026-10-29", "2026-10-30", "已退房", "退房"))
         review = next((s, p) for s, p in cursor.calls if "ctrip_ota_review_detail" in s and not s.startswith("SHOW"))
         self.assertEqual(review[1][:3], ("ctrip-audit", "2026-10-30", "2026-10-31"))
         self.assertIn("COUNT(DISTINCT", review[0])
         self.assertNotIn("review_content", review[0])
         orders = next((s, p) for s, p in cursor.calls if "FROM `meituan_ota_business_metrics`" in s and not s.startswith("SHOW"))
         self.assertEqual(orders[1][:3], ("audit", "2026-10-23", "2026-10-30"))
+
+    def test_checkout_status_aliases_keep_scope_and_deduplicate_guest_rows(self):
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("CREATE TABLE jd02 (id, hotel_id, business_date, checkin_status, "
+                         "order_id, order_source, snapshot_time)")
+            rows = [(i, "audit", "2026-10-29", status, order, source, "2026-10-30 15:00:00")
+                    for i, (status, order, source) in enumerate([
+                        ("已退房", "a", "美团"), ("退房", "b", "美团"),
+                        ("退房", "b", "美团"), ("退房", "c", "携程"),
+                        ("已退房", "d", "携程"), ("退房", "e", "散客"),
+                        ("退房", "f", "散客"), ("在住", "g", "美团"),
+                        ("退房", "", "携程"),
+                    ])]
+            rows += [(20, "other", "2026-10-29", "退房", "x", "美团", "2026-10-30 15:00:00"),
+                     (21, "audit", "2026-10-28", "退房", "y", "美团", "2026-10-30 15:00:00"),
+                     (22, "audit", "2026-10-29", "退房", "z", "美团", "2026-10-30 17:00:00")]
+            conn.executemany("INSERT INTO jd02 VALUES (?,?,?,?,?,?,?)", rows)
+
+            class SqlCursor:
+                def execute(self, sql, params):
+                    self.cursor = conn.execute(sql.replace("%s", "?"), params)
+
+                def fetchall(self):
+                    return [dict(row) for row in self.cursor.fetchall()]
+
+            columns = {"id", "hotel_id", "business_date", "checkin_status", "order_id",
+                       "order_source", "snapshot_time"}
+            with patch("marketing_diagnosis.report_opening_data._table_columns", return_value=(columns, None)):
+                counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
+            self.assertEqual(counts, {"total": 6, "meituan": 2, "ctrip": 2})
 
     def test_missing_order_dates_are_not_filled_or_counted_as_zero(self):
         def point(day, own, market):

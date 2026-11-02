@@ -67,8 +67,8 @@ def _enabled(cursor, hotel_id, requested, diagnostics):
 
 def _checkouts(cursor, table, hotel_id, yesterday, today, now):
     columns = _columns(cursor, table, {"hotel_id", "business_date", "checkin_status", "order_id"})
-    where = "hotel_id=%s AND business_date>=%s AND business_date<%s AND checkin_status=%s"
-    params = [hotel_id, yesterday, today, "已退房"]
+    where = "hotel_id=%s AND business_date>=%s AND business_date<%s AND checkin_status IN (%s,%s)"
+    params = [hotel_id, yesterday, today, "已退房", "退房"]
     if "snapshot_time" in columns:
         where += " AND snapshot_time<=%s"
         params.append(str(now))

@@ -1,4 +1,5 @@
 import json
+import importlib
 import os
 import tempfile
 import unittest
@@ -64,3 +65,20 @@ class HotelChannelScopeTest(unittest.TestCase):
             self.assertEqual(reporting_current.build_html({"hotel_id": "single"}), "美团报告")
         meituan.assert_called_once()
         dual.assert_not_called()
+
+    def test_skill_execution_uses_scoped_scoring_and_channel_label(self):
+        runtime = importlib.import_module("skills.s14-operation-diagnosis.runtime")
+        skill = runtime.S14OperationDiagnosis({"db_dsn": "mysql://test", "public_base_url": "https://example.test"})
+        paths = {"report_html": self.tmp.name + "/report.html",
+                 "report_json": self.tmp.name + "/report.json",
+                 "report_markdown": self.tmp.name + "/report.md"}
+        with (
+            patch.object(runtime, "load_mysql_dsn_dataset", return_value={}),
+            patch.object(runtime, "normalize_dataset", return_value={"sections": {}}),
+            patch.object(runtime, "write_reports", return_value=paths),
+            patch.object(latest, "_process", return_value={"ctrip_items": {}, "ctrip_summary": {}}),
+        ):
+            result = skill.execute({"hotel_id": "single", "data_source_mode": "database"})
+        self.assertNotIn("ctrip_summary", result)
+        self.assertEqual(result["enabled_channels"], ["meituan"])
+        self.assertIn("渠道：美团", result["feishu_message"])

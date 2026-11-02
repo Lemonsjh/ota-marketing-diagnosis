@@ -62,6 +62,8 @@ def _pct(value: Any) -> str:
 
 
 def _platform_zh(value: Any) -> str:
+    if isinstance(value, list):
+        return "、".join(_platform_zh(channel) for channel in value) or "未启用"
     text = str(value or "multi").lower()
     return {
         "multi": "多渠道",
@@ -142,7 +144,8 @@ def _status_text(item: dict[str, Any]) -> str:
 
 def _overview_lines(result: dict[str, Any]) -> list[str]:
     meituan_total = meituan_direct_total(result)
-    lines = [f"- 美团得分：{meituan_total:g}/100"]
+    enabled = result.get("enabled_channels")
+    lines = [f"- 美团得分：{meituan_total:g}/100"] if enabled is None or "meituan" in enabled else []
 
     ctrip = result.get("ctrip_summary")
     if isinstance(ctrip, dict) and int(_num(ctrip.get("connected_items")) or 0) > 0:
@@ -247,7 +250,7 @@ def build_feishu_reply(result: dict[str, Any]) -> str:
         f"🎯 S14 OTA营销诊断报告 — {_hotel_label(result)}",
         (
             f"来源：{_source_zh(result.get('data_source'))}｜"
-            f"渠道：{_platform_zh(result.get('platform'))}｜"
+            f"渠道：{_platform_zh(result.get('enabled_channels', result.get('platform')))}｜"
             f"周期：{_period_label(result)}"
         ),
         "",
@@ -278,7 +281,7 @@ def build_feishu_card_reply(result: dict[str, Any]) -> dict[str, Any]:
                 "content": (
                     f"**酒店：** {_hotel_label(result)}\n"
                     f"**来源：** {_source_zh(result.get('data_source'))}\n"
-                    f"**渠道：** {_platform_zh(result.get('platform'))}\n"
+                    f"**渠道：** {_platform_zh(result.get('enabled_channels', result.get('platform')))}\n"
                     f"**周期：** {_period_label(result)}"
                 ),
             },

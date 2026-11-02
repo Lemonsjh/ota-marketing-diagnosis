@@ -18,14 +18,13 @@ if str(REPO_ROOT) not in sys.path:
 from marketing_diagnosis.customer_excel_result import enrich_customer_excel_result
 from marketing_diagnosis.ctrip_flow import load_mysql_dsn_dataset
 from marketing_diagnosis.excel_loader import load_excel_dataset
-from marketing_diagnosis.latest import normalize_dataset
+from marketing_diagnosis.latest import normalize_dataset, process
 from marketing_diagnosis.reporting_current import write_reports
 from marketing_diagnosis.runtime_env import load_local_s14_env
 from marketing_diagnosis.room_name_manual_v43 import (
     normalize_room_type_names,
     parse_room_type_names_from_text,
 )
-from marketing_diagnosis.ctrip_flow_rules import process
 
 from .feishu_adapter import build_feishu_card_reply, build_feishu_reply
 

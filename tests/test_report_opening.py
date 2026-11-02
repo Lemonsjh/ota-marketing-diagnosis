@@ -105,8 +105,8 @@ class ReportOpeningTests(unittest.TestCase):
                     for i, (status, order, source) in enumerate([
                         ("已退房", "a", "美团"), ("退房", "b", "美团"),
                         ("退房", "b", "美团"), ("退房", "c", "携程"),
-                        ("已退房", "d", "携程"), ("退房", "e", "散客"),
-                        ("退房", "f", "散客"), ("在住", "g", "美团"),
+                        ("已退房", "d", "携程"), ("退房", "e", "美团"),
+                        ("退房", "f", "携程"), ("在住", "g", "美团"),
                         ("退房", "", "携程"),
                     ])]
             rows += [(20, "other", "2026-10-29", "退房", "x", "美团", "2026-10-30 15:00:00"),
@@ -125,7 +125,10 @@ class ReportOpeningTests(unittest.TestCase):
                        "order_source", "snapshot_time"}
             with patch("marketing_diagnosis.report_opening_data._table_columns", return_value=(columns, None)):
                 counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-            self.assertEqual(counts, {"total": 6, "meituan": 2, "ctrip": 2})
+                self.assertEqual(counts, {"total": 6, "meituan": 3, "ctrip": 3})
+                conn.execute("UPDATE jd02 SET order_source='中介直连' WHERE order_id IN ('e','f')")
+                counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
+                self.assertEqual(counts, {"total": 6, "meituan": None, "ctrip": None})
 
     def test_missing_order_dates_are_not_filled_or_counted_as_zero(self):
         def point(day, own, market):

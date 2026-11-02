@@ -89,6 +89,9 @@ def _checkouts(cursor, table, hotel_id, yesterday, today, now):
             platform = platform_key(row["order_source"])
             if platform:
                 counts[platform] += int(row["count"])
+        # Unattributed orders may belong to either OTA; exact platform totals are unknown.
+        if any(int(row["count"]) > 0 and platform_key(row["order_source"]) is None for row in rows):
+            counts = dict.fromkeys(PLATFORMS)
     return {"total": int(total), **counts}
 
 

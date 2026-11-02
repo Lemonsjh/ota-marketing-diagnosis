@@ -69,7 +69,7 @@ class RoomTypeClassificationTests(unittest.TestCase):
 
         fields = {field["label"]: field["value"] for field in item["fields"]}
         self.assertEqual(fields["全部在售房型数"], 3)
-        self.assertEqual(fields["可售间夜数"], 15)
+        self.assertEqual(fields["客房数"], 15)
         self.assertEqual(fields["低效房型数"], 1)
         self.assertAlmostEqual(fields["低效房型占比"], 1 / 3)
         self.assertEqual(item["item_score"], 0)
@@ -91,7 +91,7 @@ class RoomTypeClassificationTests(unittest.TestCase):
             self.assertEqual(item["source_table"], "jl11_room_type_classification")
             fields = {field["label"]: field["value"] for field in item["fields"]}
             self.assertEqual(fields["全部在售房型数"], 2)
-            self.assertEqual(fields["可售间夜数"], 10)
+            self.assertEqual(fields["客房数"], 10)
             self.assertEqual(fields["低效房型数"], 0)
             self.assertEqual(item["item_score"], 8)
 
@@ -129,7 +129,7 @@ class RoomTypeClassificationTests(unittest.TestCase):
         )
         html = _room_type_card(result["items"][0])
         for header in (
-            "可售间夜数",
+            "客房数",
             "间夜数",
             "出租率",
             "房费",

@@ -49,8 +49,8 @@ class RoomTypeClassificationTests(unittest.TestCase):
         result = self._result()
         sections = {
             "room_type_performance_daily": [
-                self._row("低效房", 0.50),
-                self._row("正常房", 0.80),
+                self._row("低效房", 50),
+                self._row("正常房", 80),
                 self._row("出租率缺失房", None),
             ]
         }
@@ -69,7 +69,7 @@ class RoomTypeClassificationTests(unittest.TestCase):
 
         fields = {field["label"]: field["value"] for field in item["fields"]}
         self.assertEqual(fields["全部在售房型数"], 3)
-        self.assertEqual(fields["房间总数"], 15)
+        self.assertEqual(fields["可售间夜数"], 15)
         self.assertEqual(fields["低效房型数"], 1)
         self.assertAlmostEqual(fields["低效房型占比"], 1 / 3)
         self.assertEqual(item["item_score"], 0)
@@ -79,7 +79,7 @@ class RoomTypeClassificationTests(unittest.TestCase):
 
         result = process({"hotel_id": "test", "platform": "multi", "sections": {
             "room_type_performance_daily": [
-                self._row("大床房", 0.80), self._row("双床房", 0.90),
+                self._row("大床房", 80), self._row("双床房", 90),
                 {"room_type_name": "旧日度记录", "room_type_id": "old",
                  "business_date": "2026-10-28", "room_count": 999,
                  "occupancy_rate": 0.10, "revpar": 10},
@@ -91,7 +91,7 @@ class RoomTypeClassificationTests(unittest.TestCase):
             self.assertEqual(item["source_table"], "jl11_room_type_classification")
             fields = {field["label"]: field["value"] for field in item["fields"]}
             self.assertEqual(fields["全部在售房型数"], 2)
-            self.assertEqual(fields["房间总数"], 10)
+            self.assertEqual(fields["可售间夜数"], 10)
             self.assertEqual(fields["低效房型数"], 0)
             self.assertEqual(item["item_score"], 8)
 
@@ -104,6 +104,23 @@ class RoomTypeClassificationTests(unittest.TestCase):
         self.assertEqual(item["data_status"], "zero")
         self.assertIn("按0分计入总分", item["note"])
 
+    def test_sub_one_percent_occupancy_is_not_multiplied_by_100(self):
+        result = self._result()
+        rows = [self._row(str(value), value) for value in (0, 0.67, 1, 60, 80)]
+        patch_room_type_summary(result, {"room_type_performance_daily": rows})
+        item = result["items"][0]
+        record = next(r for r in item["records"] if r["room_type_name"] == "0.67")
+        self.assertEqual(record["occupancy_points"], 0.67)
+        self.assertTrue(record["is_low"])
+        fields = {f["label"]: f["value"] for f in item["fields"]}
+        self.assertEqual(fields["低效房型数"], 3)
+        html = _room_type_card(item)
+        for value in ("0.00%", "0.67%", "1.00%", "60.00%", "80.00%"):
+            self.assertIn(value, html)
+        self.assertNotIn("67.00%", html)
+        self.assertIn("得分为0", html)
+        self.assertNotIn("真实为0", html)
+
     def test_report_has_only_near_30_day_columns(self):
         result = self._result()
         patch_room_type_summary(
@@ -112,7 +129,7 @@ class RoomTypeClassificationTests(unittest.TestCase):
         )
         html = _room_type_card(result["items"][0])
         for header in (
-            "房间总数",
+            "可售间夜数",
             "间夜数",
             "出租率",
             "房费",

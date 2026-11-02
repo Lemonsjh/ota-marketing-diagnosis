@@ -105,10 +105,13 @@ class PerformanceTotalMetricsTests(unittest.TestCase):
         self.assertEqual(trend["previous"], 0)
         self.assertIsNone(trend["yoy"])
         self.assertIsNone(item["item_score"])
+        self.assertEqual(item["data_status"], "not_calculable")
         from marketing_diagnosis.reporting_v37 import _performance_card
         html = _performance_card(item)
         self.assertIn("27,625.34", html)
         self.assertNotIn("99,999", html)
+        self.assertIn("去年同期为0，无法计算同比", html)
+        self.assertNotIn("规则待确认", html)
 
     def _monthly_item(self, rows):
         result = self._result()

@@ -86,6 +86,30 @@ class PerformanceTotalMetricsTests(unittest.TestCase):
 
         self.assertEqual(result["items"][0]["item_score"], 0)
 
+    def test_total_room_revenue_displays_with_zero_prior_year_without_scoring(self):
+        rows = [
+            self._row("2026-10-31", "总房费", 975.1, 27625.34, 27625.34),
+            self._row("2025-10-31", "总房费", 0, 0, 0),
+            self._row("2026-10-31", "门店总收入", 99999, 99999, 99999),
+        ]
+        result = self._result()
+        patch_performance_yoy(result, {"hotel_performance_daily": rows})
+        item = result["items"][0]
+        revenue = next(r for r in item["records"] if r["metric_name"] == "房费")
+        for period, current in (("day", 975.1), ("month", 27625.34), ("year", 27625.34)):
+            self.assertEqual(revenue[f"value_{period}"], current)
+            self.assertEqual(revenue[f"previous_value_{period}"], 0)
+            self.assertIsNone(revenue[f"yoy_{period}"])
+        trend = next(m for m in item["trend_periods"][-1]["metrics"] if m["key"] == "revenue")
+        self.assertEqual(trend["current"], 27625.34)
+        self.assertEqual(trend["previous"], 0)
+        self.assertIsNone(trend["yoy"])
+        self.assertIsNone(item["item_score"])
+        from marketing_diagnosis.reporting_v37 import _performance_card
+        html = _performance_card(item)
+        self.assertIn("27,625.34", html)
+        self.assertNotIn("99,999", html)
+
     def _monthly_item(self, rows):
         result = self._result()
         patch_performance_yoy(result, {"hotel_monthly": rows})

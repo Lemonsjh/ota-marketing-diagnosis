@@ -21,3 +21,18 @@ def project_environment():
 
 def hotel(hotel_id):
     return reader().profiles().get(hotel_id) if os.environ.get("HOTEL_OTA_HOTEL_CONFIG_DIR") else None
+
+
+def channels(hotel_id):
+    return reader().channels(hotel_id) if os.environ.get("HOTEL_OTA_HOTEL_CONFIG_DIR") else None
+
+
+def scoped_platform(hotel_id, platform="multi"):
+    enabled = channels(hotel_id)
+    if enabled is None:
+        return platform
+    requested = {platform} if platform in {"meituan", "ctrip"} else {"meituan", "ctrip"}
+    selected = requested & enabled
+    if not selected:
+        raise ValueError("no_enabled_ota_channels")
+    return "multi" if len(selected) == 2 else next(iter(selected))

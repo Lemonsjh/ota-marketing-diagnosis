@@ -237,6 +237,8 @@ def load_mysql_dsn_dataset(
     period_start: str | None = None,
     period_end: str | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
+    from marketing_diagnosis.hotel_profiles import scoped_platform
+    platform = scoped_platform(hotel_id, platform)
     table_map = {**DEFAULT_MYSQL_TABLES, **(tables or {})}
     dataset = upstream.load_mysql_dsn_dataset(
         dsn,

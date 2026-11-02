@@ -57,6 +57,9 @@ def build_ctrip_html(result: dict[str, Any]) -> str:
 
 
 def build_dual_channel_html(result: dict[str, Any]) -> str:
+    document = _single_channel_html(result)
+    if document is not None:
+        return document
     return patch_opening_html(patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
         patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_dual_channel_html(result)), result), result)), result),
         result,
@@ -64,6 +67,9 @@ def build_dual_channel_html(result: dict[str, Any]) -> str:
 
 
 def build_html(result: dict[str, Any]) -> str:
+    document = _single_channel_html(result)
+    if document is not None:
+        return document
     return patch_opening_html(patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
         patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_html(result)), result), result)), result),
         result,
@@ -74,6 +80,18 @@ def build_meituan_html(result: dict[str, Any]) -> str:
     return patch_opening_html(patch_recent_reviews_html(
         patch_market_html(patch_channel_score_totals(_build_meituan_html(result), result), result), result,
     ), result)
+
+
+def _single_channel_html(result):
+    from marketing_diagnosis.hotel_profiles import channels
+    enabled = channels(result.get("hotel_id"))
+    if enabled == {"meituan"}:
+        return build_meituan_html(result)
+    if enabled == {"ctrip"}:
+        return build_ctrip_html(result)
+    if enabled == set():
+        raise ValueError("no_enabled_ota_channels")
+    return None
 
 
 def build_markdown(result: dict[str, Any]) -> str:

@@ -8,6 +8,7 @@ Rules:
 - Generated reports are runtime artifacts and must be written under `S14_REPORT_OUTPUT_DIR`, not committed to git.
 - This project generates diagnosis reports and read-only course answers. It does not write prices, inventory, promotions, or review replies.
 - Current reports use the already mapped fields as one overall diagnosis. Never ask the user to choose Meituan, Ctrip, Fliggy, or multi-channel. Internally always use `platform=multi`.
+- The current hotel's profile `channels` limits database reads, scoring input and report views. A single-platform hotel receives only its enabled platform's report; source selection and shared course Q&A remain unchanged.
 - Never send internal development summaries such as “修复已就绪”, source-code change descriptions, test summaries, or root-cause tables to a normal Feishu user.
 - Never send serialized card JSON, source code, command output, or exception tracebacks to a Feishu user. Callback failures must use the fixed bounded Chinese error message.
 - Never say “点击上面卡片” unless an interactive card was actually included in the same outbound message.

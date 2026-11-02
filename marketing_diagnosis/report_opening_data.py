@@ -103,6 +103,18 @@ def _checkouts(cursor, table, hotel_id, yesterday, today, now):
     return {"total": int(total), **counts}
 
 
+def _ctrip_checkouts(cursor, table, hotel_id, yesterday, today, now):
+    columns = _columns(cursor, table, {"hotel_id", "order_id", "departure_date", "order_status", "order_status_type"})
+    where = "hotel_id=%s AND departure_date>=%s AND departure_date<%s AND order_status=%s AND order_status_type=%s"
+    params = [hotel_id, yesterday, today, "已过离店日期", "CheckIn"]
+    if "snapshot_time" in columns:
+        where += " AND snapshot_time<=%s"
+        params.append(str(now))
+    rows = _query(cursor, f"SELECT COUNT(DISTINCT NULLIF(TRIM(order_id),'')) AS count "
+                  f"FROM {_safe_identifier(table)} WHERE {where}", params)
+    return int(rows[0]["count"])
+
+
 def _reviews(cursor, table, hotel_id, today, tomorrow, now):
     columns = _columns(cursor, table, {"hotel_id", "review_time"})
     count = "COUNT(*)"
@@ -219,6 +231,13 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
         except Exception as exc:
             diagnostics.append(platform + "_reviews_unavailable:" + type(exc).__name__)
         denominator = checkouts[platform]
+        if platform == "ctrip":
+            denominator = None
+            try:
+                denominator = _ctrip_checkouts(cursor, tables.get("ctrip_order_detail", "ctrip_ota_order_detail"),
+                                               scoped_id, yesterday, today, now)
+            except Exception as exc:
+                diagnostics.append("ctrip_checkouts_unavailable:" + type(exc).__name__)
         reviews.append({"platform": platform, "review_count": count, "checkout_orders": denominator,
                         "rate": count / denominator if count is not None and denominator else None})
         try:
@@ -229,10 +248,11 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
             points = []
         orders.append({"platform": platform, "daily_points": points})
     review_total = _sum([row["review_count"] for row in reviews])
+    checkout_total = _sum([row["checkout_orders"] for row in reviews])
     return {"as_of": str(now), "checkout_date": yesterday, "review_date": today,
             "order_period_start": order_start, "order_period_end": yesterday, "participates_in_score": False,
             "reviews": {"platforms": reviews, "total": {"review_count": review_total,
-                "checkout_orders": checkouts["total"],
-                "rate": review_total / checkouts["total"] if review_total is not None and checkouts["total"] else None}},
+                "checkout_orders": checkout_total,
+                "rate": review_total / checkout_total if review_total is not None and checkout_total else None}},
             "orders": {"platforms": orders, "daily_totals": order_totals(orders)},
             "diagnostics": diagnostics}

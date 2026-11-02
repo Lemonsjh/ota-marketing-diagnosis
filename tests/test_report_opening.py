@@ -28,7 +28,8 @@ class Cursor:
             fields = {"id", "hotel_id", "business_date", "checkin_status", "order_id",
                       "order_source", "snapshot_time", "review_time", "review_id",
                       "metric_code", "metric_value", "metric_unit", "peer_average",
-                      "competitor_rank", "competition_circle_hotel_count"}
+                      "competitor_rank", "competition_circle_hotel_count", "departure_date",
+                      "order_status", "order_status_type"}
             self.rows = [{"Field": field} for field in fields]
         elif "FROM hotels" in sql:
             self.rows = [{"config_json": {"channels": ["meituan"] if self.disabled else ["meituan", "ctrip"]}}]
@@ -36,6 +37,8 @@ class Cursor:
             self.rows = [] if self.zero else [{"order_source": "美团", "count": 2}, {"order_source": "携程", "count": 1}]
         elif "jd02" in sql:
             self.rows = [{"count": 0 if self.zero else 3}]
+        elif "ctrip_ota_order_detail" in sql:
+            self.rows = [{"count": 0 if self.zero else 1}]
         elif "review_detail" in sql:
             self.rows = [{"count": 2 if "meituan" in sql else 1}]
         elif "competition_metrics_30d" in sql:
@@ -93,6 +96,8 @@ class ReportOpeningTests(unittest.TestCase):
         self.assertEqual(review[1][:3], ("ctrip-audit", "2026-10-30", "2026-10-31"))
         self.assertIn("COUNT(DISTINCT", review[0])
         self.assertNotIn("review_content", review[0])
+        checkout = next((s, p) for s, p in cursor.calls if s.startswith("SELECT") and "FROM `ctrip_ota_order_detail`" in s)
+        self.assertEqual(checkout[1][:5], ("ctrip-audit", "2026-10-29", "2026-10-30", "已过离店日期", "CheckIn"))
         orders = next((s, p) for s, p in cursor.calls if "FROM `meituan_ota_business_metrics`" in s and not s.startswith("SHOW"))
         self.assertEqual(orders[1][:3], ("audit", "2026-10-23", "2026-10-30"))
 
@@ -137,6 +142,30 @@ class ReportOpeningTests(unittest.TestCase):
                 counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
                 # Source-only a, both-fields b and membership-only e count once each.
                 self.assertEqual(counts, {"total": 6, "meituan": 3, "ctrip": None})
+
+    def test_ctrip_checkout_source_and_platform_sum_replace_pms_denominator(self):
+        class OTACursor(Cursor):
+            unavailable = False
+
+            def execute(self, sql, params=()):
+                super().execute(sql, params)
+                if sql.startswith("SELECT") and "FROM `ctrip_ota_order_detail`" in sql:
+                    if self.unavailable:
+                        raise RuntimeError("ota_unavailable")
+                    self.rows = [{"count": 7}]
+
+        result = opening(OTACursor())
+        ctrip = result["reviews"]["platforms"][1]
+        self.assertEqual(ctrip["checkout_orders"], 7)
+        self.assertEqual(ctrip["rate"], 1 / 7)
+        self.assertEqual(result["reviews"]["total"]["checkout_orders"], 9)
+        self.assertEqual(result["reviews"]["total"]["rate"], 3 / 9)
+
+        cursor = OTACursor()
+        cursor.unavailable = True
+        result = opening(cursor)
+        self.assertIsNone(result["reviews"]["platforms"][1]["checkout_orders"])
+        self.assertIsNone(result["reviews"]["total"]["rate"])
 
     def test_missing_order_dates_are_not_filled_or_counted_as_zero(self):
         def point(day, own, market):

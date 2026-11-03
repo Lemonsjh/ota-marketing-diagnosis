@@ -47,3 +47,7 @@ openclaw memory status --agent hotel-shared-knowledge --index --json
 - `S14_OUTPUT_GATE_FILE`：默认 `/opt/openclaw/workspaces/hotel-ota-ai/runtime/safety/feishu_output.py`。
 - `S14_GATEWAY_CONFIG`：主网关配置路径；默认沿用 `OPENCLAW_CONFIG_PATH`，未设置时使用 `/root/.openclaw/openclaw.json`。不要指向知识库的独立检索配置。
 - `HOTEL_OTA_DB`：仅酒店诊断报告继续使用 SQLite 酒店绑定；共享课程不依赖此绑定，也不创建绑定或授予酒店数据权限。
+
+## 诊断 Agent 与技能名
+
+主网关诊断 Agent ID 为 `operation-diagnosis`，各酒店 `*-s14` 账号的 binding 指向该 ID。Agent 的技能白名单保留 `s14-operation-diagnosis` 和 `hotel-shared-knowledge`；技能名和目录不随 Agent ID 更名。Agent 私有目录为 `/root/.openclaw/agents/operation-diagnosis/agent`，迁移时保留其中的模型鉴权配置及上级目录中的会话。共享课程检索仍使用独立的 `hotel-shared-knowledge` 配置和索引。

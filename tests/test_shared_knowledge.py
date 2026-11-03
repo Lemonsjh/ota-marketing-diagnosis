@@ -41,7 +41,7 @@ class SharedKnowledgeTests(unittest.TestCase):
             "s14-a": {"enabled": True, "groupPolicy": "allowlist", "groupAllowFrom": ["oc_test_a", "oc_test_b", "oc_no_hotel"]},
             "s14-b": {"enabled": True, "groupAllowFrom": ["oc_test_a"]},
             "chief": {"enabled": True, "groupAllowFrom": ["oc_test_a", "oc_main_only"]}}}},
-            "bindings": [{"type": "route", "agentId": "s14-operation-diagnosis",
+            "bindings": [{"type": "route", "agentId": "operation-diagnosis",
                           "match": {"channel": "feishu", "accountId": account}} for account in ["s14-a", "s14-b"]]}
         self.write_gateway()
         self.env = patch.dict(os.environ, {"S14_KNOWLEDGE_ROOT": str(self.root), "S14_GATEWAY_CONFIG": str(self.gateway)})
@@ -102,6 +102,14 @@ class SharedKnowledgeTests(unittest.TestCase):
         with patch.dict(os.environ, {"HOTEL_OTA_DB": str(self.db)}), patch.object(kb, "_native_search", return_value=[self.hit()]):
             self.assertEqual(self.search(chat="oc_no_hotel")["status"], "ok")
         self.assertFalse(self.db.exists())
+
+    def test_skill_name_cannot_replace_diagnosis_agent_route(self):
+        for route in self.gateway_config["bindings"]:
+            route["agentId"] = "s14-operation-diagnosis"
+        self.write_gateway()
+        with patch.object(kb, "_native_search") as native:
+            self.assertEqual(self.search()["status"], "blocked")
+            native.assert_not_called()
 
     def test_missing_invalid_or_disabled_gateway_config_fails_closed(self):
         accounts = self.gateway_config["channels"]["feishu"]["accounts"]

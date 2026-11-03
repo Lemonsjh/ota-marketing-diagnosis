@@ -59,7 +59,7 @@ def authorize_group(chat_id: str, sender_id: str, account_id: str) -> None:
         account = feishu["accounts"][account_id]
         groups = account.get("groupAllowFrom", [])
         routed = any(route.get("type", "route") == "route"
-                     and route.get("agentId") == "s14-operation-diagnosis"
+                     and route.get("agentId") == "operation-diagnosis"
                      and route.get("match", {}).get("channel") == "feishu"
                      and route.get("match", {}).get("accountId") == account_id
                      for route in config.get("bindings", []))

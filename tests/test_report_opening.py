@@ -26,7 +26,7 @@ class Cursor:
         if sql.startswith("SHOW COLUMNS"):
             if self.missing and "jd02" in sql:
                 raise RuntimeError("missing_table")
-            fields = {"id", "hotel_id", "business_date", "checkin_status", "order_id",
+            fields = {"id", "hotel_id", "business_date", "checkin_status", "order_id", "main_checkin_id",
                       "order_source", "snapshot_time", "review_time", "review_id",
                       "metric_code", "metric_value", "metric_unit", "peer_average",
                       "competitor_rank", "competition_circle_hotel_count", "departure_date",
@@ -92,7 +92,7 @@ class ReportOpeningTests(unittest.TestCase):
         cursor = Cursor(pms_source="PMS（美团）")
         opening(cursor)
         checkout = next((s, p) for s, p in cursor.calls if "ROW_NUMBER()" in s)
-        self.assertIn("PARTITION BY order_id", checkout[0])
+        self.assertIn("PARTITION BY NULLIF(TRIM(main_checkin_id),'')", checkout[0])
         self.assertIn("hotel_id=%s", checkout[0])
         self.assertEqual(checkout[1][:5], ("audit", "2026-10-29", "2026-10-30", "已退房", "退房"))
         review = next((s, p) for s, p in cursor.calls if "ctrip_ota_review_detail" in s and not s.startswith("SHOW"))
@@ -145,6 +145,45 @@ class ReportOpeningTests(unittest.TestCase):
                 counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
                 # Source-only a, both-fields b and membership-only e count once each.
                 self.assertEqual(counts, {"total": 6, "meituan": 3, "ctrip": None})
+
+    def test_designated_pms_deduplicates_main_checkin_id_and_recognizes_meituan_prepaid(self):
+        for source in ("PMS（美团）", "PMS（别样红）"):
+            with self.subTest(source=source), sqlite3.connect(":memory:") as conn:
+                conn.row_factory = sqlite3.Row
+                conn.execute("CREATE TABLE jd02 (id, hotel_id, business_date, checkin_status, order_id, "
+                             "order_source, snapshot_time, member_level, main_checkin_id, source_platform)")
+                def row(i, order, main, channel="中介直连", member="美团预付", **changes):
+                    data = dict(id=i, hotel_id="audit", business_date="2026-10-29", checkin_status="已退房",
+                                order_id=order, order_source=channel, snapshot_time="2026-10-30 15:00:00",
+                                member_level=member, main_checkin_id=main, source_platform=source)
+                    data.update(changes)
+                    return tuple(data.values())
+                conn.executemany("INSERT INTO jd02 VALUES (?,?,?,?,?,?,?,?,?,?)", [
+                    row(1, None, "main-a"), row(2, None, "main-a", member=None),
+                    row(3, "shared-order", "main-b", "美团"), row(4, "shared-order", "main-c", "美团"),
+                    row(5, "ctrip-order", "main-d", "携程", None),
+                    row(6, "order-only", "", "美团"),
+                    row(7, "other", "other", hotel_id="other"),
+                    row(8, "old", "old", business_date="2026-10-28"),
+                    row(9, "inhouse", "inhouse", checkin_status="在住"),
+                    row(10, "future", "future", snapshot_time="2026-10-30 17:00:00"),
+                ])
+                class SqlCursor:
+                    def execute(self, sql, params):
+                        self.cursor = conn.execute(sql.replace("%s", "?"), params)
+                    def fetchall(self):
+                        return [dict(item) for item in self.cursor.fetchall()]
+                columns = {item[1] for item in conn.execute("PRAGMA table_info(jd02)")}
+                with patch("marketing_diagnosis.report_opening_data._table_columns", return_value=(columns, None)):
+                    counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
+                    self.assertEqual(counts, {"total": 4, "meituan": 3, "ctrip": None})
+                    columns.remove("main_checkin_id")
+                    with self.assertRaises(ValueError):
+                        _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
+                    columns.add("main_checkin_id")
+                    conn.execute("UPDATE jd02 SET source_platform='PMS（住哲）'")
+                    counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
+                    self.assertEqual(counts, {"total": 3, "meituan": 2, "ctrip": 1})
 
     def test_ctrip_checkout_source_and_platform_sum_replace_pms_denominator(self):
         class OTACursor(Cursor):

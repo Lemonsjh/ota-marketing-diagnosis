@@ -11,6 +11,7 @@ from marketing_diagnosis.db_loader import _safe_identifier, _table_columns
 
 
 PLATFORMS = ("meituan", "ctrip")
+MAIN_CHECKIN_PMS = {"PMS（美团）", "PMS（别样红）"}
 
 
 def report_time():
@@ -66,22 +67,26 @@ def _enabled(cursor, hotel_id, requested, diagnostics):
 
 
 def _checkouts(cursor, table, hotel_id, yesterday, today, now):
-    columns = _columns(cursor, table, {"hotel_id", "business_date", "checkin_status", "order_id"})
+    columns = _columns(cursor, table, {"hotel_id", "business_date", "checkin_status"})
+    pms_source = _pms_source(cursor, table, hotel_id, now) if "source_platform" in columns else None
+    key = "main_checkin_id" if pms_source in MAIN_CHECKIN_PMS else "order_id"
+    if key not in columns:
+        raise ValueError("checkout_identity_column_missing")
     where = "hotel_id=%s AND business_date>=%s AND business_date<%s AND checkin_status IN (%s,%s)"
     params = [hotel_id, yesterday, today, "已退房", "退房"]
     if "snapshot_time" in columns:
         where += " AND snapshot_time<=%s"
         params.append(str(now))
-    valid_order = "NULLIF(TRIM(order_id),'')"
+    valid_order = f"NULLIF(TRIM({key}),'')"
     total = _query(cursor, f"SELECT COUNT(DISTINCT {valid_order}) AS count FROM {_safe_identifier(table)} WHERE {where}", params)[0]["count"]
     counts = {platform: None for platform in PLATFORMS}
     if "order_source" in columns:
         # One order may have several guest rows. Pick its latest source without
         # exporting names, order IDs or any accommodation detail to the report.
-        order = "snapshot_time DESC, id DESC" if "id" in columns and "snapshot_time" in columns else "order_id"
+        order = "snapshot_time DESC, id DESC" if "id" in columns and "snapshot_time" in columns else key
         rows = _query(cursor,
             "SELECT order_source, COUNT(*) AS count FROM ("
-            f"SELECT order_source, ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY {order}) AS rn "
+            f"SELECT order_source, ROW_NUMBER() OVER (PARTITION BY {valid_order} ORDER BY {order}) AS rn "
             f"FROM {_safe_identifier(table)} WHERE {where} AND {valid_order} IS NOT NULL"
             ") AS stays WHERE rn=1 GROUP BY order_source", params)
         counts = dict.fromkeys(PLATFORMS, 0)
@@ -95,10 +100,10 @@ def _checkouts(cursor, table, hotel_id, yesterday, today, now):
     if "member_level" in columns:
         source = "LOWER(order_source)" if "order_source" in columns else "''"
         patterns = ("%美团%", "%大众点评%", "%meituan%", "%dianping%")
-        matches = [f"{source} LIKE %s"] * len(patterns) + ["TRIM(member_level)=%s"]
+        matches = [f"{source} LIKE %s"] * len(patterns) + ["TRIM(member_level) IN (%s,%s)"]
         rows = _query(cursor,
             f"SELECT COUNT(DISTINCT {valid_order}) AS count FROM {_safe_identifier(table)} "
-            f"WHERE {where} AND ({' OR '.join(matches)})", [*params, *patterns, "美团"])
+            f"WHERE {where} AND ({' OR '.join(matches)})", [*params, *patterns, "美团", "美团预付"])
         counts["meituan"] = int(rows[0]["count"])
     return {"total": int(total), **counts}
 
@@ -243,7 +248,7 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
             source = _pms_source(cursor, guest_table, hotel_id, now)
         except Exception as exc:
             diagnostics.append("pms_source_unavailable:" + type(exc).__name__)
-    ctrip_ota = source in {"PMS（美团）", "PMS（别样红）"}
+    ctrip_ota = source in MAIN_CHECKIN_PMS
     reviews, orders = [], []
     for platform in platforms:
         scoped_id = ctrip_hotel_id if platform == "ctrip" else hotel_id

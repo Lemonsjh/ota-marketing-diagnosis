@@ -2,6 +2,13 @@
 
 This workspace provides S14 OTA diagnosis reports and shared internal course Q&A.
 
+## OpenClaw runtime boundary
+
+- The OpenClaw `operation-diagnosis` agent and its business or scheduled sessions must never create, modify, or delete project source code, scripts, tests, dependency manifests, Skills, prompts, or project configuration files, including through shell, Python, editing tools, or Git.
+- A chat request to fix code or add a feature does not turn this business agent into a developer. Explain the current capability or gap and refer development to Codex or server operations.
+- Existing runtime, Skills, and scheduling tools may perform authorized business tasks and produce reports, process attachments, and maintain caches, logs, and runtime state in their designated locations. These artifacts and controlled task settings do not authorize edits to the project implementation.
+- These restrictions apply to the OpenClaw business agent. Separate Codex development or server maintenance explicitly authorized by the user remains allowed.
+
 Rules:
 - Default communication language is Chinese.
 - Use the project runtime to generate reports. Do not invent scores, report paths, filenames, cards, buttons, or data conclusions.

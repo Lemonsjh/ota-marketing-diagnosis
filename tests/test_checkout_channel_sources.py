@@ -22,16 +22,17 @@ class CheckoutChannelSourceTests(unittest.TestCase):
                     values.update(changes)
                     return tuple(values.values())
                 conn.executemany("INSERT INTO jd02 VALUES (?,?,?,?,?,?,?,?,?,?,?)", [
-                    row(1, "a", "中介直连", "美团"),
+                    row(1, "a", "中介直连", "美团", checkin_status="已结"),
                     row(2, "b", "美团", "meituan", "美团预付"),
-                    row(3, "b", "美团", "meituan", "美团预付"),
-                    row(4, "c", "中介直连", "携程"),
-                    row(5, "d", "qunar", "去哪儿"),
+                    row(3, "b", "美团", "meituan", "美团预付", checkin_status="已结"),
+                    row(4, "c", "中介直连", "携程", checkin_status="已结"),
+                    row(5, "d", "qunar", "去哪儿", checkin_status="退房"),
                     row(6, "other", "美团", "美团", hotel_id="other"),
                     row(7, "old", "美团", "美团", business_date="2026-11-04"),
                     row(8, "inhouse", "美团", "美团", checkin_status="在住"),
                     row(9, "future", "美团", "美团", snapshot_time="2026-11-06 13:00:00"),
                     row(10, "", "美团", "美团"),
+                    row(11, "unsettled", "美团", "美团", checkin_status="未结"),
                 ])
                 class Cursor:
                     def execute(self, sql, params):

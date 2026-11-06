@@ -94,7 +94,7 @@ class ReportOpeningTests(unittest.TestCase):
         checkout = next((s, p) for s, p in cursor.calls if "ROW_NUMBER()" in s)
         self.assertIn("PARTITION BY NULLIF(TRIM(main_checkin_id),'')", checkout[0])
         self.assertIn("hotel_id=%s", checkout[0])
-        self.assertEqual(checkout[1][:5], ("audit", "2026-10-29", "2026-10-30", "已退房", "退房"))
+        self.assertEqual(checkout[1][:6], ("audit", "2026-10-29", "2026-10-30", "已退房", "退房", "已结"))
         review = next((s, p) for s, p in cursor.calls if "ctrip_ota_review_detail" in s and not s.startswith("SHOW"))
         self.assertEqual(review[1][:3], ("ctrip-audit", "2026-10-30", "2026-10-31"))
         self.assertIn("COUNT(DISTINCT", review[0])

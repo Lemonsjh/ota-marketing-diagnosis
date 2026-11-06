@@ -72,8 +72,8 @@ def _checkouts(cursor, table, hotel_id, yesterday, today, now):
     key = "main_checkin_id" if pms_source in MAIN_CHECKIN_PMS else "order_id"
     if key not in columns:
         raise ValueError("checkout_identity_column_missing")
-    where = "hotel_id=%s AND business_date>=%s AND business_date<%s AND checkin_status IN (%s,%s)"
-    params = [hotel_id, yesterday, today, "已退房", "退房"]
+    where = "hotel_id=%s AND business_date>=%s AND business_date<%s AND checkin_status IN (%s,%s,%s)"
+    params = [hotel_id, yesterday, today, "已退房", "退房", "已结"]
     if "snapshot_time" in columns:
         where += " AND snapshot_time<=%s"
         params.append(str(now))

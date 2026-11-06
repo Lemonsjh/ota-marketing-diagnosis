@@ -80,30 +80,35 @@ def _checkouts(cursor, table, hotel_id, yesterday, today, now):
     valid_order = f"NULLIF(TRIM({key}),'')"
     total = _query(cursor, f"SELECT COUNT(DISTINCT {valid_order}) AS count FROM {_safe_identifier(table)} WHERE {where}", params)[0]["count"]
     counts = {platform: None for platform in PLATFORMS}
-    if "order_source" in columns:
+    source_fields = [field for field in ("order_source", "guest_source") if field in columns]
+    if source_fields:
         # One order may have several guest rows. Pick its latest source without
         # exporting names, order IDs or any accommodation detail to the report.
         order = "snapshot_time DESC, id DESC" if "id" in columns and "snapshot_time" in columns else key
+        sources = ", ".join(source_fields)
         rows = _query(cursor,
-            "SELECT order_source, COUNT(*) AS count FROM ("
-            f"SELECT order_source, ROW_NUMBER() OVER (PARTITION BY {valid_order} ORDER BY {order}) AS rn "
+            f"SELECT {sources}, COUNT(*) AS count FROM ("
+            f"SELECT {sources}, ROW_NUMBER() OVER (PARTITION BY {valid_order} ORDER BY {order}) AS rn "
             f"FROM {_safe_identifier(table)} WHERE {where} AND {valid_order} IS NOT NULL"
-            ") AS stays WHERE rn=1 GROUP BY order_source", params)
+            f") AS stays WHERE rn=1 GROUP BY {sources}", params)
         counts = dict.fromkeys(PLATFORMS, 0)
         for row in rows:
-            platform = platform_key(row["order_source"])
-            if platform:
+            matched = {platform_key(row.get(field)) for field in source_fields} - {None}
+            for platform in matched:
                 counts[platform] += int(row["count"])
         # Unattributed orders may belong to either OTA; exact platform totals are unknown.
-        if any(int(row["count"]) > 0 and platform_key(row["order_source"]) is None for row in rows):
+        if any(int(row["count"]) > 0 and not any(platform_key(row.get(field)) for field in source_fields) for row in rows):
             counts = dict.fromkeys(PLATFORMS)
-    if "member_level" in columns:
-        source = "LOWER(order_source)" if "order_source" in columns else "''"
+    if "member_level" in columns or "guest_source" in columns:
         patterns = ("%美团%", "%大众点评%", "%meituan%", "%dianping%")
-        matches = [f"{source} LIKE %s"] * len(patterns) + ["TRIM(member_level) IN (%s,%s)"]
+        matches = [f"LOWER({field}) LIKE %s" for field in source_fields for _ in patterns]
+        match_params = list(patterns) * len(source_fields)
+        if "member_level" in columns:
+            matches.append("TRIM(member_level) IN (%s,%s)")
+            match_params.extend(("美团", "美团预付"))
         rows = _query(cursor,
             f"SELECT COUNT(DISTINCT {valid_order}) AS count FROM {_safe_identifier(table)} "
-            f"WHERE {where} AND ({' OR '.join(matches)})", [*params, *patterns, "美团", "美团预付"])
+            f"WHERE {where} AND ({' OR '.join(matches)})", [*params, *match_params])
         counts["meituan"] = int(rows[0]["count"])
     return {"total": int(total), **counts}
 

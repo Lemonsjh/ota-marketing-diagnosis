@@ -83,10 +83,22 @@ def _knowledge_documents(root: Path) -> dict:
         raise ValueError("non-course Markdown is present")
     config = json.loads((root / "openclaw.json").read_text(encoding="utf-8"))
     defaults = config["agents"]["defaults"]
-    memory = defaults["memorySearch"]
+    memory = config["memory"]["search"] if "memory" in config else defaults["memorySearch"]
+    agents = config["agents"]
+    if "entries" in agents:
+        roster = agents["entries"]
+        if not isinstance(roster, dict) or list(roster) != [PROFILE]:
+            raise ValueError("retrieval agent scope changed")
+        agent = roster[PROFILE]
+    else:
+        roster = agents["list"]
+        if len(roster) != 1 or roster[0].get("id") != PROFILE:
+            raise ValueError("retrieval agent scope changed")
+        agent = roster[0]
     if (Path(defaults["workspace"]).resolve() != root.resolve() or memory.get("sources") != ["memory"]
             or memory.get("extraPaths") or memory.get("provider") != "local"
-            or [a["id"] for a in config["agents"]["list"]] != [PROFILE]):
+            or Path(agent.get("workspace", str(root))).resolve() != root.resolve()
+            or agent.get("memorySearch") or agent.get("memory")):
         raise ValueError("retrieval profile scope changed")
     index = root / "state" / "memory" / f"{PROFILE}.sqlite"
     with closing(sqlite3.connect(index.resolve().as_uri() + "?mode=ro", uri=True)) as con:

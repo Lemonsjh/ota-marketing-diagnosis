@@ -189,6 +189,29 @@ class SharedKnowledgeTests(unittest.TestCase):
         self.assertFalse((self.root / "READY.json").exists())
         self.assertFalse((self.root / "release.json").exists())
 
+    def test_keyed_agents_and_global_memory_search_preserve_course_scope(self):
+        path = self.root / "openclaw.json"
+        config = json.loads(path.read_text())
+        config["agents"]["entries"] = {kb.PROFILE: {}}
+        del config["agents"]["list"]
+        config["memory"] = {"search": config["agents"]["defaults"].pop("memorySearch")}
+        path.write_text(json.dumps(config))
+        self.assertEqual(len(kb._knowledge_documents(self.root)), 42)
+        for entry in ({"workspace": str(self.source)}, {"memory": {"search": {"provider": "openai"}}}):
+            config["agents"]["entries"][kb.PROFILE] = entry
+            path.write_text(json.dumps(config))
+            with self.assertRaises(ValueError):
+                kb._knowledge_documents(self.root)
+
+    def test_new_retrieval_config_cannot_add_another_agent(self):
+        path = self.root / "openclaw.json"
+        config = json.loads(path.read_text())
+        config["agents"]["entries"] = {kb.PROFILE: {}, "another-agent": {}}
+        del config["agents"]["list"]
+        path.write_text(json.dumps(config))
+        with self.assertRaises(ValueError):
+            kb._knowledge_documents(self.root)
+
     def test_course_list_can_add_an_approved_document_without_code_changes(self):
         path = self.root / "memory/EC-099.md"
         path.write_text("# 新批准的课程\n\n课程正文。\n", encoding="utf-8")

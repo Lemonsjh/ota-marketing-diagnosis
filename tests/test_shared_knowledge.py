@@ -195,8 +195,23 @@ class SharedKnowledgeTests(unittest.TestCase):
         config["agents"]["entries"] = {kb.PROFILE: {}}
         del config["agents"]["list"]
         config["memory"] = {"search": config["agents"]["defaults"].pop("memorySearch")}
+        config["memory"]["search"]["rememberAcrossConversations"] = False
+        index = self.root / "state/agents" / kb.PROFILE / "agent/openclaw-agent.sqlite"
+        index.parent.mkdir(parents=True)
+        with closing(sqlite3.connect(index)) as con, con:
+            con.execute("CREATE TABLE memory_index_sources(path, hash, source)")
+            con.execute("CREATE TABLE memory_index_meta(key, value)")
+            con.executemany("INSERT INTO memory_index_sources VALUES(?,?,'memory')",
+                            [(path, doc["sha256"]) for path, doc in load_courses(self.root).items()])
+            con.execute("INSERT INTO memory_index_meta VALUES('memory_index_meta_v1', ?)",
+                        (json.dumps({"provider": "local", "sources": ["memory"]}),))
         path.write_text(json.dumps(config))
         self.assertEqual(len(kb._knowledge_documents(self.root)), 42)
+        config["memory"]["search"]["rememberAcrossConversations"] = True
+        path.write_text(json.dumps(config))
+        with self.assertRaises(ValueError):
+            kb._knowledge_documents(self.root)
+        config["memory"]["search"]["rememberAcrossConversations"] = False
         for entry in ({"workspace": str(self.source)}, {"memory": {"search": {"provider": "openai"}}}):
             config["agents"]["entries"][kb.PROFILE] = entry
             path.write_text(json.dumps(config))

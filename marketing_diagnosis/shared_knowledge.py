@@ -90,6 +90,9 @@ def _knowledge_documents(root: Path) -> dict:
         if not isinstance(roster, dict) or list(roster) != [PROFILE]:
             raise ValueError("retrieval agent scope changed")
         agent = roster[PROFILE]
+        if (memory.get("rememberAcrossConversations") is not False
+                or memory.get("experimental", {}).get("sessionMemory") is True):
+            raise ValueError("retrieval cannot include conversation memory")
     else:
         roster = agents["list"]
         if len(roster) != 1 or roster[0].get("id") != PROFILE:
@@ -100,9 +103,17 @@ def _knowledge_documents(root: Path) -> dict:
             or Path(agent.get("workspace", str(root))).resolve() != root.resolve()
             or agent.get("memorySearch") or agent.get("memory")):
         raise ValueError("retrieval profile scope changed")
-    index = root / "state" / "memory" / f"{PROFILE}.sqlite"
+    modern = "entries" in agents
+    index = (root / "state/agents" / PROFILE / "agent/openclaw-agent.sqlite" if modern
+             else root / "state/memory" / f"{PROFILE}.sqlite")
+    table = "memory_index_sources" if modern else "files"
     with closing(sqlite3.connect(index.resolve().as_uri() + "?mode=ro", uri=True)) as con:
-        indexed = dict(con.execute("SELECT path, hash FROM files WHERE source='memory'"))
+        indexed = dict(con.execute(f"SELECT path, hash FROM {table} WHERE source='memory'"))
+        if modern:
+            row = con.execute("SELECT value FROM memory_index_meta WHERE key='memory_index_meta_v1'").fetchone()
+            meta = json.loads(row[0]) if row else {}
+            if meta.get("provider") != "local" or meta.get("sources") != ["memory"]:
+                raise ValueError("course vector index needs updating")
     if indexed != {path: doc["sha256"] for path, doc in docs.items()}:
         raise ValueError("course index needs updating")
     return docs

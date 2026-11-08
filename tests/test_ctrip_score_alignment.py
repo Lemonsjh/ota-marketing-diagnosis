@@ -118,7 +118,7 @@ def test_ctrip_flash_stay_is_a_scoring_item(monkeypatch):
     assert unjoined["ctrip_items"]["17"]["fields"][0]["value"] == "未参与"
 
 
-def test_ctrip_business_travel_not_joined_uses_enrollment_status(monkeypatch):
+def test_ctrip_business_travel_missing_activity_is_not_participating(monkeypatch):
     from marketing_diagnosis import ctrip_flow_rules
 
     monkeypatch.setattr(ctrip_flow_rules, "upstream_process", lambda data: {"visual_diagnosis": {"items": []}, "ctrip_items": {
@@ -131,8 +131,9 @@ def test_ctrip_business_travel_not_joined_uses_enrollment_status(monkeypatch):
     item = result["ctrip_items"]["16"]
     assert item["item_score"] == 0
     assert item["fields"] == [
-        {"label": "报名状态", "value": "未报名", "note": ""},
-        {"label": "参与房型", "value": 0, "note": ""},
+        {"label": "参与状态", "value": "未参与", "note": ""},
+        {"label": "近30天订单", "value": 0, "note": ""},
+        {"label": "成交金额", "value": 0, "note": ""},
     ]
 
 

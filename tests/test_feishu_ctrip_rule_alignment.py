@@ -7,9 +7,9 @@ def test_feishu_runtime_uses_final_ctrip_flow_rule_pipeline():
     """Feishu reports must use the same final scoring entry as direct reports."""
 
     runtime = import_module("skills.s14-operation-diagnosis.runtime")
-    flow_rules = import_module("marketing_diagnosis.ctrip_flow_rules")
+    latest = import_module("marketing_diagnosis.latest")
 
-    assert runtime.process is flow_rules.process
+    assert runtime.process is latest.process
 
 
 def test_feishu_runtime_uses_final_ctrip_database_loader():

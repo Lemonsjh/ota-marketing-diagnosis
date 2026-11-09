@@ -259,6 +259,11 @@ def _strip_hidden_source_details(document: str) -> str:
     document = _PSI_SOURCE_RE.sub("", document)
     document = _CTRIP_SOURCE_RE.sub("", document)
     document = _CTRIP_COMPETITION_SOURCE_RE.sub("", document)
+    document = re.sub(
+        r"<div class='notice'>本项必须评分：未取得jl11_room_type_classification中section=summary记录，[^<]*</div>",
+        "<div class='notice'>暂无房型经营汇总，本项按规则计0分。</div>",
+        document,
+    )
     document = document.replace(
         "<div class='notice'>未接入字段统一显示“待接入”，不会使用美团数据或示例值替代。</div>", "",
     )

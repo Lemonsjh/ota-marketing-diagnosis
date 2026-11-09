@@ -9,6 +9,7 @@ def test_known_ctrip_source_blocks_are_removed_from_generated_html():
     source = """
     <div class='ctrip-source-v55'><b>携程数据来源：</b>携程 eBooking</div>
     <div class='ctrip-competition-source'><b>数据口径：</b>近30天</div>
+    <div class='notice'>本项必须评分：未取得jl11_room_type_classification中section=summary记录，按0分计入总分。</div>
     <div class='psi-source-v53'>
       <div><b>页面数据来源</b>携程 eBooking</div>
       <div><b>数据库来源与计分口径</b>ctrip_ota_psi_score</div>
@@ -21,6 +22,8 @@ def test_known_ctrip_source_blocks_are_removed_from_generated_html():
     assert "数据口径" not in output
     assert "页面数据来源" not in output
     assert "数据库来源与计分口径" not in output
+    assert "jl11_room_type_classification" not in output
+    assert "暂无房型经营汇总，本项按规则计0分。" in output
 
 
 def test_runtime_cleanup_covers_summary_source_column_and_key_conclusion():

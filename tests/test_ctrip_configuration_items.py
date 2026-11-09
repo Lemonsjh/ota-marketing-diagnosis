@@ -1,4 +1,5 @@
 from marketing_diagnosis.ctrip_configuration_v63 import build_configuration_items
+from marketing_diagnosis.latest import normalize_dataset, process as process_current
 from marketing_diagnosis.rules_v5 import process
 
 
@@ -114,3 +115,25 @@ def test_rules_attach_ctrip_configuration_items_to_report_result():
     assert result["ctrip_items"]["13"]["item_score"] == 2.4
     assert result["ctrip_items"]["14"]["item_score"] == 1.8
     assert result["ctrip_items"]["17"]["participates_in_score"] is False
+
+
+def test_current_travel_photo_rule_uses_counts_and_hides_claim_status_without_uploads():
+    cases = [
+        (0, 2, "UPLOADED", "已认领", 0, None),
+        (4, 0, "NOT_UPLOADED", "claimed", 1, "未认领"),
+        (4, 2, "UPLOADED", "unclaimed", 2, "已认领"),
+        (None, None, "UPLOADED", "claimed", 1, "暂无数据"),
+        (None, None, "NOT_UPLOADED", None, 0, None),
+    ]
+    for uploaded, claimed, status, detail, score, claim_label in cases:
+        raw = {"ctrip_promotion_status": [_row(
+            "travel_photo", status=status, status_detail=detail, metric_value=9,
+            travel_photo_uploaded_count=uploaded, travel_photo_claimed_count=claimed,
+        )]}
+        item = process_current(normalize_dataset(raw))["ctrip_items"]["19"]
+        fields = {field["label"]: field["value"] for field in item["fields"]}
+        assert item["item_score"] == score
+        assert fields["旅拍上传"] == ("已上传" if score else "未上传")
+        assert fields["旅拍数量"] == (uploaded if uploaded is not None else 9 if score else 0)
+        assert fields.get("认领状态") == claim_label
+        assert ("认领状态" in fields) is (claim_label is not None)

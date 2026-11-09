@@ -5,7 +5,7 @@ from typing import Any
 from marketing_diagnosis.ctrip_flow_rank_rules import build_flow_item
 from marketing_diagnosis.ctrip_rights_data import build_rights_item
 from marketing_diagnosis.ctrip_score_alignment import align_ctrip_scores
-from marketing_diagnosis.ctrip_configuration_v63 import _business_item
+from marketing_diagnosis.ctrip_configuration_v63 import _activity, _business_item, _decision, _field, _item, _state
 from marketing_diagnosis.meituan_market_share import _stamp, patch_market_share
 from marketing_diagnosis.meituan_recent_reviews import attach_recent_reviews
 from marketing_diagnosis.rules_v5 import _refresh_ctrip_summary
@@ -132,6 +132,36 @@ def _patch_business_travel(items: dict[str, Any], sections: dict[str, Any]) -> N
     items["16"] = item
 
 
+def _photo_count(value: Any) -> int | None:
+    count = _number(value)
+    return int(count) if count is not None and count.is_integer() and count >= 0 else None
+
+
+def _travel_photo_item(sections: dict[str, Any]) -> dict[str, Any]:
+    source = "携程 eBooking / 信息维护 / 酒店亮点 / 旅拍"
+    rows = [row for row in sections.get("ctrip_promotion_status") or [] if isinstance(row, dict)]
+    row = _activity(rows, 19)
+    if not row:
+        return _item(19, None, "missing", source, [], "等待旅拍状态快照。")
+
+    uploaded = _photo_count(row.get("travel_photo_uploaded_count"))
+    active = uploaded > 0 if uploaded is not None else _state(row)
+    fields = [_decision("旅拍上传", active, positive="已上传", negative="未上传")]
+    if active is None:
+        return _item(19, None, "pending_rule", source, fields, "旅拍上传状态待确认。")
+    if not active:
+        fields.append(_field("旅拍数量", 0))
+        return _item(19, 0.0, "success", source, fields, "")
+
+    claimed = _photo_count(row.get("travel_photo_claimed_count"))
+    fields.append(_field("旅拍数量", uploaded if uploaded is not None else row.get("metric_value")))
+    if claimed is None:
+        fields.append(_field("认领状态", "暂无数据"))
+        return _item(19, 1.0, "partial", source, fields, "")
+    fields.append(_field("认领状态", "已认领" if claimed > 0 else "未认领"))
+    return _item(19, 2.0 if claimed > 0 else 1.0, "success", source, fields, "")
+
+
 def process(data: dict[str, Any]) -> dict[str, Any]:
     """Apply final Ctrip rule corrections after the established rule pipeline."""
 
@@ -160,6 +190,7 @@ def process(data: dict[str, Any]) -> dict[str, Any]:
     _normalize_points_alliance_fields(items)
     _zero_inactive_points_metrics(items)
     _patch_business_travel(items, sections)
+    items["19"] = _travel_photo_item(sections)
     _fallback_information_completeness(items, sections)
     align_ctrip_scores(result, sections)
     _refresh_ctrip_summary(result)

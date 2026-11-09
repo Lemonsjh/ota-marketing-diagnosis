@@ -56,17 +56,9 @@ def _point(row: dict[str, Any], day: str) -> dict[str, Any]:
             "reason": "ok" if total > 0 else "zero_market"}
 
 
-def patch_market_share(result: dict[str, Any], sections: dict[str, Any], *,
-                       hotel_id: str | None = None, as_of: datetime | None = None) -> dict[str, Any]:
-    from marketing_diagnosis.meituan_exposure_monthly import _find_item, _refresh_summary
-
-    item = _find_item((result.get("visual_diagnosis") or {}).get("items"), 3)
-    if item is None:
-        return result
-    now = as_of or report_time()
+def market_room_nights(rows, hotel_id, now):
     days = [(now.date() - timedelta(days=offset)).isoformat() for offset in range(7, 0, -1)]
-    rows = [row for row in sections.get(SECTION, []) if isinstance(row, dict)
-            and row.get("metric_code") == METRIC_CODE]
+    rows = [row for row in rows if isinstance(row, dict) and row.get("metric_code") == METRIC_CODE]
     hotel_ids = {str(row.get("hotel_id")) for row in rows if row.get("hotel_id")}
     scope = str(hotel_id) if hotel_id else next(iter(hotel_ids)) if len(hotel_ids) == 1 else None
     latest: dict[str, Any] = {}
@@ -78,7 +70,17 @@ def patch_market_share(result: dict[str, Any], sections: dict[str, Any], *,
         previous = latest.get(day)
         if previous is None or (stamp, int(row.get("id") or 0)) > (_stamp(previous.get("snapshot_time")), int(previous.get("id") or 0)):
             latest[day] = row
-    points = [_point(latest.get(day, {}), day) for day in days]
+    return [_point(latest.get(day, {}), day) for day in days], list(latest.values())
+
+
+def patch_market_share(result: dict[str, Any], sections: dict[str, Any], *,
+                       hotel_id: str | None = None, as_of: datetime | None = None) -> dict[str, Any]:
+    from marketing_diagnosis.meituan_exposure_monthly import _find_item, _refresh_summary
+
+    item = _find_item((result.get("visual_diagnosis") or {}).get("items"), 3)
+    if item is None:
+        return result
+    points, records = market_room_nights(sections.get(SECTION, []), hotel_id, as_of or report_time())
     yesterday = points[-1]
     item.update({
         "item_name": TITLE, "data_status": "pending_rule" if yesterday["share"] is not None else "missing",
@@ -86,7 +88,7 @@ def patch_market_share(result: dict[str, Any], sections: dict[str, Any], *,
         "fields": [{"label": "昨日本店大盘份额", "value": f"{yesterday['share']:.2%}" if yesterday["share"] is not None else "待更新"},
                    {"label": "本店入住间夜", "value": yesterday["own_room_nights"]},
                    {"label": "大盘入住间夜（估算）", "value": yesterday["market_room_nights"]}],
-        "records": list(latest.values()), "market_share": {"yesterday": yesterday, "daily_points": points},
+        "records": records, "market_share": {"yesterday": yesterday, "daily_points": points},
         "source_table": "meituan_ota_business_metrics",
         "source_fields": ["business_date", "metric_code", "metric_value", "peer_average", "competitor_rank", "snapshot_time"],
         "note": DESCRIPTION + " 按入住间夜估算，不等同于全店出租率或订单份额；评分规则待确认。",

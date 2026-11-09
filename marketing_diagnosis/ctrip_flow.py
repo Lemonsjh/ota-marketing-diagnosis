@@ -255,9 +255,11 @@ def load_mysql_dsn_dataset(
     with base._connect_mysql(dsn) as conn:
         with conn.cursor() as cursor:
             from marketing_diagnosis.report_opening_data import load_opening
+            from marketing_diagnosis.meituan_market_share import SECTION
 
             dataset["report_opening"] = load_opening(
                 cursor, table_map, hotel_id, ctrip_id, base._enabled_platforms(platform),
+                meituan_rows=dataset.get(SECTION, ()),
             )
             if "ctrip" not in base._enabled_platforms(platform):
                 for section in ("ctrip_business_metrics_funnel", "ctrip_promotion_activity",

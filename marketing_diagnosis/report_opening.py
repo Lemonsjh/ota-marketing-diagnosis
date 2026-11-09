@@ -136,8 +136,16 @@ def _chart(points, label, chart_id):
     return "".join(parts + dots) + "</svg>"
 
 
+def _market_panel(payload):
+    if "room_nights" in payload:
+        panel = payload["room_nights"]
+        return panel, panel["period_start"], panel["period_end"], "间夜", "room_nights"
+    return payload["orders"], payload["order_period_start"], payload["order_period_end"], "订单", "orders"
+
+
 def opening_html(payload, prefix="opening"):
-    reviews, orders = payload["reviews"], payload["orders"]
+    reviews = payload["reviews"]
+    market, start, end, measure, field = _market_panel(payload)
     total = reviews["total"]
     platform_facts = "".join(
         f"<div class='opening-platform'><h4>{LABELS[row['platform']]}</h4><div class='opening-platform-facts'>"
@@ -152,29 +160,37 @@ def opening_html(payload, prefix="opening"):
               + _metric("昨日退房订单", _num(total["checkout_orders"]))
               + _metric("今日新增评论", _num(total["review_count"])) + "</div>" + platform_facts + "</div></div></article>")
     panels = []
-    series = [("total", "合计", orders["daily_totals"]),
-              *[(row["platform"], LABELS[row["platform"]], row["daily_points"]) for row in orders["platforms"]]]
+    series = [("total", "合计", market["daily_totals"]),
+              *[(row["platform"], LABELS[row["platform"]], row["daily_points"]) for row in market["platforms"]]]
     for key, label, points in series:
         rows = []
         by_date = {point["business_date"]: point for point in points}
         aligned = []
-        for total_point in orders["daily_totals"]:
+        for total_point in market["daily_totals"]:
             day = total_point["business_date"]
             point = by_date.get(day, {})
             aligned.append({"business_date": day, "share": point.get("share")})
             row = [day[5:]]
-            row += [_num(point.get("own_orders")), _num(point.get("market_orders")), _pct(point.get("share"))]
+            row += [_num(point.get(f"own_{field}")), _num(point.get(f"market_{field}")), _pct(point.get("share"))]
             rows.append(row)
         panels.append(f"<div class='opening-order-panel' data-opening-panel='{key}' id='{prefix}-{key}' role='tabpanel' aria-labelledby='{prefix}-{key}-tab'{' hidden' if key!='total' else ''}>"
                       "<div class='opening-chart'><div class='opening-chart-scroll'>"
                       + _chart(aligned, label, f"{prefix}-{key}-fill") + "</div></div>"
                       + "<div class='opening-detail'>"
-                      + (_table(["日期", "本店订单", "竞争圈订单", "本店占比"], rows) if rows else "<p>暂无数据</p>") + "</div></div>")
+                      + (_table(["日期", f"本店{measure}", f"竞争圈{measure}", "本店占比"], rows) if rows else "<p>暂无数据</p>") + "</div></div>")
     tabs = "".join(f"<button type='button' role='tab' id='{prefix}-{key}-tab' data-opening-tab='{key}' aria-controls='{prefix}-{key}' aria-selected='{str(key=='total').lower()}' tabindex='{0 if key=='total' else -1}'>{label}</button>" for key, label, _ in series)
-    order = (f"<article class='diagnosis-card'><div class='card-top'><div class='card-title'><h3>近7天订单与商圈占比</h3><p>{_text(payload['order_period_start'])} 至 {_text(payload['order_period_end'])} · 每日全日订单</p></div></div>"
-             "<div class='result-area'><div class='opening-order-toolbar'><h4 data-opening-title>合计本店占比趋势</h4><div class='opening-tabs' role='tablist' aria-label='订单平台'>" + tabs + "</div></div>" + "".join(panels)
-             + "<p class='opening-note'>竞争圈订单为商家数×同行均值的估算值；合计按当日有数据的平台求和，再计算本店占比。</p></div></article>")
-    return "<section class='report-opening' aria-label='经营数据概览'>" + review + order + "</section>"
+    details = "每日全日订单"
+    note = "竞争圈订单为商家数×同行均值的估算值。"
+    if field == "room_nights":
+        metrics = {"meituan": "美团入住间夜", "ctrip": "携程在店间夜"}
+        details = " · ".join(metrics[row["platform"]] for row in market["platforms"])
+        note = "竞争圈间夜为估算值。"
+    subtitle = " · ".join(part for part in (f"{start} 至 {end}", details) if part)
+    panel = (f"<article class='diagnosis-card'><div class='card-top'><div class='card-title'><h3>近7天{measure}与商圈占比</h3><p>{_text(subtitle)}</p></div></div>"
+             f"<div class='result-area'><div class='opening-order-toolbar'><h4 data-opening-title>合计本店占比趋势</h4><div class='opening-tabs' role='tablist' aria-label='{measure}平台'>"
+             + tabs + "</div></div>" + "".join(panels)
+             + f"<p class='opening-note'>{note}合计按当日有数据的平台求和后计算占比。</p></div></article>")
+    return "<section class='report-opening' aria-label='经营数据概览'>" + review + panel + "</section>"
 
 
 def patch_opening_html(document, result):
@@ -195,14 +211,16 @@ def opening_markdown(result):
     payload = result.get("report_opening")
     if not payload:
         return ""
-    reviews, orders = payload["reviews"], payload["orders"]
+    reviews = payload["reviews"]
+    market, start, end, measure, field = _market_panel(payload)
+    unit = "间夜" if field == "room_nights" else "单"
     total = reviews["total"]
     lines = ["## 昨日点评率", f"{payload['checkout_date']}退房／{payload['review_date']}新增评论",
              f"合计：退房{_num(total['checkout_orders'])}单，新增评论{_num(total['review_count'])}条，点评率{_pct(total['rate'])}。"]
     lines.extend(f"- {LABELS[row['platform']]}：退房{_num(row['checkout_orders'])}单，新增评论{_num(row['review_count'])}条，点评率{_pct(row['rate'])}。" for row in reviews["platforms"])
-    lines += ["", f"## 近7天订单与商圈占比（{payload['order_period_start']}至{payload['order_period_end']}）"]
-    for label, points in [("合计", orders["daily_totals"]), *[(LABELS[r["platform"]], r["daily_points"]) for r in orders["platforms"]]]:
+    lines += ["", f"## 近7天{measure}与商圈占比（{start}至{end}）"]
+    for label, points in [("合计", market["daily_totals"]), *[(LABELS[r["platform"]], r["daily_points"]) for r in market["platforms"]]]:
         lines.append(f"### {label}")
         for row in points:
-            lines.append(f"- {row['business_date']}：本店{_num(row['own_orders'])}单，竞争圈估算{_num(row['market_orders'])}单，占比{_pct(row['share'])}。")
+            lines.append(f"- {row['business_date']}：本店{_num(row[f'own_{field}'])}{unit}，竞争圈估算{_num(row[f'market_{field}'])}{unit}，占比{_pct(row['share'])}。")
     return "\n".join(lines) + "\n\n"

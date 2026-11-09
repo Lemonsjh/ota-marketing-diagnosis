@@ -6,12 +6,16 @@ from unittest.mock import patch
 
 from marketing_diagnosis.db_loader import DEFAULT_MYSQL_TABLES
 from marketing_diagnosis.latest import normalize_dataset, process
+from marketing_diagnosis.meituan_market_share import METRIC_CODE, SECTION
 from marketing_diagnosis.report_opening import patch_opening_html, _chart
-from marketing_diagnosis.report_opening_data import _checkouts, load_opening, order_point, order_totals
+from marketing_diagnosis.report_opening_data import CTRIP_ROOM_NIGHTS, _checkouts, load_opening, room_night_totals
 from marketing_diagnosis.reporting_current import build_html, build_markdown
 
 
 NOW = dt.datetime(2026, 10, 30, 16)
+MEITUAN_ROWS = [{"hotel_id": "audit", "metric_code": METRIC_CODE, "business_date": "2026-10-29",
+                "metric_value": 10, "metric_unit": "间夜", "peer_average": 2,
+                "competitor_rank": "1/5", "snapshot_time": NOW - dt.timedelta(minutes=10)}]
 
 
 class Cursor:
@@ -47,11 +51,9 @@ class Cursor:
         elif "competition_metrics_30d" in sql:
             self.rows = [{"competition_circle_hotel_count": 10}]
         elif "business_metrics" in sql:
-            mt = "meituan" in sql
-            self.rows = [{"metric_code": "PAY_ORDER_CNT" if mt else "booking_order_count",
-                          "business_date": "2026-10-29",
-                          "metric_value": 10 if mt else 5, "metric_unit": "order",
-                          "peer_average": 2 if mt else 3, "competitor_rank": "1/5" if mt else "3",
+            self.rows = [{"business_date": "2026-10-29",
+                          "metric_value": 6, "metric_unit": "room_night",
+                          "peer_average": 3, "competitor_rank": "3",
                           "snapshot_time": NOW - dt.timedelta(minutes=10)}]
         else:
             raise AssertionError(sql)
@@ -62,7 +64,8 @@ class Cursor:
 
 def opening(cursor=None):
     with patch("marketing_diagnosis.report_opening_data.report_time", return_value=NOW):
-        return load_opening(cursor or Cursor(), DEFAULT_MYSQL_TABLES, "audit", "ctrip-audit", ["meituan", "ctrip"])
+        return load_opening(cursor or Cursor(), DEFAULT_MYSQL_TABLES, "audit", "ctrip-audit",
+                            ["meituan", "ctrip"], meituan_rows=MEITUAN_ROWS)
 
 
 class ReportOpeningTests(unittest.TestCase):
@@ -80,11 +83,12 @@ class ReportOpeningTests(unittest.TestCase):
         result = opening()
         self.assertFalse(result["participates_in_score"])
         self.assertEqual(result["reviews"]["total"]["rate"], 1)
-        total = result["orders"]["daily_totals"][0]
-        self.assertEqual((total["own_orders"], total["market_orders"], total["share"]), (15, 40, .375))
-        self.assertEqual(result["orders"]["platforms"][0]["daily_points"][0]["market_orders"], 10)
-        self.assertEqual(result["orders"]["platforms"][1]["daily_points"][0]["merchant_count"], 10)
-        self.assertEqual(result["order_period_start"], "2026-10-23")
+        nights = result["room_nights"]
+        total = nights["daily_totals"][0]
+        self.assertEqual((total["own_room_nights"], total["market_room_nights"], total["share"]), (16, 48, 16 / 48))
+        self.assertEqual(nights["platforms"][0]["daily_points"][0]["market_room_nights"], 18)
+        self.assertEqual(nights["platforms"][1]["daily_points"][0]["hotel_count"], 10)
+        self.assertEqual(nights["period_start"], "2026-10-23")
         self.assertEqual(result["checkout_date"], "2026-10-29")
         self.assertEqual(result["review_date"], "2026-10-30")
 
@@ -101,8 +105,10 @@ class ReportOpeningTests(unittest.TestCase):
         self.assertNotIn("review_content", review[0])
         checkout = next((s, p) for s, p in cursor.calls if s.startswith("SELECT") and "FROM `ctrip_ota_order_detail`" in s)
         self.assertEqual(checkout[1][:5], ("ctrip-audit", "2026-10-29", "2026-10-30", "已过离店日期", "CheckIn"))
-        orders = next((s, p) for s, p in cursor.calls if "FROM `meituan_ota_business_metrics`" in s and not s.startswith("SHOW"))
-        self.assertEqual(orders[1][:3], ("audit", "2026-10-23", "2026-10-30"))
+        nights = next(p for s, p in cursor.calls if s.startswith("SELECT") and "FROM `ctrip_ota_business_metrics`" in s)
+        self.assertEqual(nights[:4], ("ctrip-audit", "2026-10-23", "2026-10-30", CTRIP_ROOM_NIGHTS))
+        count = next(p for s, p in cursor.calls if s.startswith("SELECT") and "FROM `ctrip_ota_competition_metrics_30d`" in s)
+        self.assertEqual(count[:2], ("ctrip-audit", CTRIP_ROOM_NIGHTS))
 
     def test_checkout_status_aliases_keep_scope_and_deduplicate_guest_rows(self):
         with sqlite3.connect(":memory:") as conn:
@@ -219,10 +225,10 @@ class ReportOpeningTests(unittest.TestCase):
         self.assertIsNone(result["reviews"]["platforms"][1]["checkout_orders"])
         self.assertIsNone(result["reviews"]["total"]["rate"])
 
-    def test_missing_order_dates_are_not_filled_or_counted_as_zero(self):
+    def test_missing_room_night_dates_are_not_filled_or_counted_as_zero(self):
         def point(day, own, market):
-            return {"business_date": day, "platform": "meituan", "own_orders": own, "market_orders": market}
-        result = order_totals([
+            return {"business_date": day, "own_room_nights": own, "market_room_nights": market}
+        result = room_night_totals([
             {"platform": "meituan", "daily_points": [point("2026-10-23", 2, 10), point("2026-10-29", 4, 20)]},
             {"platform": "ctrip", "daily_points": []},
         ])
@@ -248,19 +254,17 @@ class ReportOpeningTests(unittest.TestCase):
             result = opening(cursor)
             self.assertIsNone(result["reviews"]["total"]["rate"])
             self.assertEqual(result["reviews"]["total"]["review_count"], 3)
-        self.assertIsNone(order_point([], "ctrip")["market_orders"])
 
-    def test_flow_fallback_is_same_batch_and_does_not_override_pay(self):
-        rows = [{"metric_code": "PAY_ORDER_CNT", "metric_value": 4,
-                 "peer_average": 3, "competitor_rank": "2/10", "snapshot_time": "current"},
-                {"metric_code": "FLOW_PAY_ORDER_CNT", "metric_value": 99,
-                 "peer_average": 99, "snapshot_time": "old"}]
-        self.assertEqual(order_point(rows, "meituan")["market_orders"], 30)
-        rows[0]["metric_value"] = None
-        self.assertIsNone(order_point(rows, "meituan")["own_orders"])
+    def test_meituan_opening_uses_same_daily_point_as_rule_three(self):
+        data = normalize_dataset({"hotel_id": "audit", SECTION: MEITUAN_ROWS, "report_opening": opening()})
+        result = process(data)
+        item = next(row for row in result["visual_diagnosis"]["items"] if row.get("market_share"))
+        self.assertEqual(item["market_share"]["yesterday"],
+                         result["report_opening"]["room_nights"]["platforms"][0]["daily_points"][0])
 
     def test_no_score_change_and_opening_between_overview_and_summary(self):
-        original = process(normalize_dataset({}))
+        with patch("marketing_diagnosis.meituan_market_share.report_time", return_value=NOW):
+            original = process(normalize_dataset({}))
         data = normalize_dataset({"report_opening": opening()})
         result = process(data)
         self.assertEqual(original["visual_diagnosis"], result["visual_diagnosis"])
@@ -273,7 +277,9 @@ class ReportOpeningTests(unittest.TestCase):
             opening_index = document.index("class='report-opening'", overview)
             self.assertLess(overview, opening_index)
             self.assertLess(opening_index, document.index("id='" + prefix + "summary'"))
-        self.assertIn("37.50%", document)
+        self.assertIn("33.33%", document)
+        self.assertIn("美团入住间夜 · 携程在店间夜", document)
+        self.assertIn("近7天间夜与商圈占比", build_markdown(result))
         self.assertEqual(patch_opening_html(document, result), document)
         self.assertIn("昨日点评率", build_markdown(result))
 

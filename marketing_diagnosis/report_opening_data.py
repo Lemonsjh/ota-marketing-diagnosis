@@ -8,10 +8,12 @@ import re
 from zoneinfo import ZoneInfo
 
 from marketing_diagnosis.db_loader import _safe_identifier, _table_columns
+from marketing_diagnosis.meituan_market_share import market_room_nights
 
 
 PLATFORMS = ("meituan", "ctrip")
 MAIN_CHECKIN_PMS = {"PMS（美团）", "PMS（别样红）"}
+CTRIP_ROOM_NIGHTS = "inhouse_room_night"
 
 
 def report_time():
@@ -154,86 +156,69 @@ def _rank_count(value):
 
 
 def _circle_count(cursor, table, hotel_id, now):
-    _columns(cursor, table, {"hotel_id", "snapshot_time", "competition_circle_hotel_count"})
+    _columns(cursor, table, {"hotel_id", "metric_code", "snapshot_time", "competition_circle_hotel_count"})
     rows = _query(cursor,
         f"SELECT competition_circle_hotel_count FROM {_safe_identifier(table)} "
         "WHERE hotel_id=%s AND metric_code=%s AND snapshot_time<=%s ORDER BY snapshot_time DESC LIMIT 1",
-        [hotel_id, "booking_order_count", str(now)])
+        [hotel_id, CTRIP_ROOM_NIGHTS, str(now)])
     count = number(rows[0].get("competition_circle_hotel_count")) if rows else None
     return int(count) if count and count.is_integer() else None
 
 
-def order_point(rows, platform, count=None):
-    code = "PAY_ORDER_CNT" if platform == "meituan" else "booking_order_count"
-    row = next((row for row in rows if row.get("metric_code") == code), {})
-    batch = [item for item in rows if item.get("snapshot_time") == row.get("snapshot_time")]
-    own = number(row.get("metric_value"))
-    peer = number(row.get("peer_average"))
-    if platform == "meituan":
-        fallback = next((item for item in batch if item.get("metric_code") == "FLOW_PAY_ORDER_CNT"), {})
-        own = own if own is not None else number(fallback.get("metric_value"))
-        peer = peer if peer is not None else number(fallback.get("peer_average"))
-    count = _rank_count(row.get("competitor_rank")) or count
-    if count is None:
-        counts = {_rank_count(item.get("competitor_rank")) for item in batch} - {None}
-        count = next(iter(counts)) if len(counts) == 1 else None
-    # This opening panel uses the requested merchant-count × peer-average formula.
-    market = peer * count if peer is not None and count else None
-    return {"platform": platform, "own_orders": own, "peer_average": peer,
-            "merchant_count": count, "market_orders": market,
-            "share": own / market if own is not None and market else None,
-            "snapshot_time": str(row.get("snapshot_time") or "")}
-
-
-def _orders(cursor, table, hotel_id, start, today, now, platform, circle_table):
-    _columns(cursor, table, {"hotel_id", "business_date", "snapshot_time", "metric_code",
-                             "metric_value", "metric_unit", "peer_average", "competitor_rank"})
+def _ctrip_room_nights(cursor, table, hotel_id, start, today, now, circle_table):
+    columns = _columns(cursor, table, {"hotel_id", "business_date", "snapshot_time", "metric_code",
+                                       "metric_value", "metric_unit", "peer_average", "competitor_rank"})
+    order = "snapshot_time DESC" + (", id DESC" if "id" in columns else "")
     rows = _query(cursor,
-        "SELECT business_date,metric_code,metric_value,metric_unit,peer_average,competitor_rank,snapshot_time "
+        "SELECT business_date,metric_value,metric_unit,peer_average,competitor_rank,snapshot_time "
         f"FROM {_safe_identifier(table)} WHERE hotel_id=%s AND business_date>=%s "
-        "AND business_date<%s AND snapshot_time<=%s ORDER BY snapshot_time DESC",
-        [hotel_id, start, today, str(now)])
-    code = "PAY_ORDER_CNT" if platform == "meituan" else "booking_order_count"
-    units = {"单", "order", "orders"}
-    rows = [row for row in rows if str(row.get("metric_unit") or "").lower() in units or row.get("metric_code") != code]
-    count = None
-    if platform == "ctrip" and not _rank_count(next((r.get("competitor_rank") for r in rows if r.get("metric_code") == code), None)):
-        try:
-            count = _circle_count(cursor, circle_table, hotel_id, now)
-        except Exception:
-            pass
+        f"AND business_date<%s AND metric_code=%s AND snapshot_time<=%s ORDER BY {order}",
+        [hotel_id, start, today, CTRIP_ROOM_NIGHTS, str(now)])
     days = {}
     for row in rows:
-        days.setdefault(str(row["business_date"])[:10], []).append(row)
-    return [{"business_date": day, **order_point(batch, platform, count)}
-            for day, batch in sorted(days.items())
-            if any(row.get("metric_code") == code for row in batch)]
+        day = str(row["business_date"])[:10]
+        if str(row["snapshot_time"])[:10] > day and row["metric_unit"] in {"间夜", "room_night", "room_nights"}:
+            days.setdefault(day, row)
+    circle_count = None
+    if any(_rank_count(row["competitor_rank"]) is None for row in days.values()):
+        try:
+            circle_count = _circle_count(cursor, circle_table, hotel_id, now)
+        except Exception:
+            pass
+    points = []
+    for day, row in sorted(days.items()):
+        own, peer = number(row["metric_value"]), number(row["peer_average"])
+        count = _rank_count(row["competitor_rank"]) or circle_count
+        market = peer * count if peer is not None and count else None
+        points.append({"business_date": day, "own_room_nights": own, "market_room_nights": market,
+                       "hotel_count": count, "share": own / market if own is not None and market else None})
+    return points
 
 
 def _sum(values):
     return sum(values) if values and all(value is not None for value in values) else None
 
 
-def order_totals(platforms):
+def room_night_totals(platforms):
     days = {}
     for platform in platforms:
         for point in platform["daily_points"]:
-            days.setdefault(point["business_date"], []).append(point)
+            days.setdefault(point["business_date"], []).append((platform["platform"], point))
     totals = []
     for day, points in sorted(days.items()):
-        own = _sum([point["own_orders"] for point in points])
-        market = _sum([point["market_orders"] for point in points])
-        totals.append({"business_date": day, "own_orders": own, "market_orders": market,
+        own = _sum([point["own_room_nights"] for _, point in points])
+        market = _sum([point["market_room_nights"] for _, point in points])
+        totals.append({"business_date": day, "own_room_nights": own, "market_room_nights": market,
                        "share": own / market if own is not None and market else None,
-                       "platforms": [point["platform"] for point in points]})
+                       "platforms": [platform for platform, _ in points]})
     return totals
 
 
-def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
+def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested, *, meituan_rows=()):
     now = report_time()
     today = now.date().isoformat()
     yesterday = (now.date() - dt.timedelta(days=1)).isoformat()
-    order_start = (now.date() - dt.timedelta(days=7)).isoformat()
+    nights_start = (now.date() - dt.timedelta(days=7)).isoformat()
     tomorrow = (now.date() + dt.timedelta(days=1)).isoformat()
     diagnostics = []
     platforms = _enabled(cursor, hotel_id, requested, diagnostics)
@@ -250,7 +235,7 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
         except Exception as exc:
             diagnostics.append("pms_source_unavailable:" + type(exc).__name__)
     ctrip_ota = source in MAIN_CHECKIN_PMS
-    reviews, orders = [], []
+    reviews, room_nights = [], []
     for platform in platforms:
         scoped_id = ctrip_hotel_id if platform == "ctrip" else hotel_id
         count = None
@@ -268,19 +253,24 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
                 diagnostics.append("ctrip_checkouts_unavailable:" + type(exc).__name__)
         reviews.append({"platform": platform, "review_count": count, "checkout_orders": denominator,
                         "rate": count / denominator if count is not None and denominator else None})
-        try:
-            points = _orders(cursor, tables[f"{platform}_funnel"], scoped_id, order_start, today, now, platform,
-                            tables.get("ctrip_competition_metrics_30d", "ctrip_ota_competition_metrics_30d"))
-        except Exception as exc:
-            diagnostics.append(platform + "_orders_unavailable:" + type(exc).__name__)
-            points = []
-        orders.append({"platform": platform, "daily_points": points})
+        if platform == "meituan":
+            points, _ = market_room_nights(meituan_rows, scoped_id, now)
+            points = [point for point in points if point["own_room_nights"] is not None]
+        else:
+            try:
+                points = _ctrip_room_nights(cursor, tables["ctrip_funnel"], scoped_id, nights_start, today, now,
+                    tables.get("ctrip_competition_metrics_30d", "ctrip_ota_competition_metrics_30d"))
+            except Exception as exc:
+                diagnostics.append("ctrip_room_nights_unavailable:" + type(exc).__name__)
+                points = []
+        room_nights.append({"platform": platform, "daily_points": points})
     review_total = _sum([row["review_count"] for row in reviews])
     checkout_total = _sum([row["checkout_orders"] for row in reviews])
     return {"as_of": str(now), "checkout_date": yesterday, "review_date": today,
-            "order_period_start": order_start, "order_period_end": yesterday, "participates_in_score": False,
+            "participates_in_score": False,
             "reviews": {"platforms": reviews, "total": {"review_count": review_total,
                 "checkout_orders": checkout_total,
                 "rate": review_total / checkout_total if review_total is not None and checkout_total else None}},
-            "orders": {"platforms": orders, "daily_totals": order_totals(orders)},
+            "room_nights": {"period_start": nights_start, "period_end": yesterday,
+                            "platforms": room_nights, "daily_totals": room_night_totals(room_nights)},
             "diagnostics": diagnostics}

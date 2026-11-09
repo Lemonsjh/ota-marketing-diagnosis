@@ -7,7 +7,6 @@ from marketing_diagnosis import ctrip_report as stable_ctrip_report
 from marketing_diagnosis import dual_channel_report_v56 as upstream
 from marketing_diagnosis.ctrip_flow_report import SCRIPT as FLOW_SCRIPT
 from marketing_diagnosis.ctrip_flow_report import STYLE as FLOW_STYLE
-from marketing_diagnosis.ctrip_flow_report import card as flow_card
 
 
 build_ctrip_page = stable_ctrip_report.build_html
@@ -282,10 +281,6 @@ def _strip_hidden_source_details(document: str) -> str:
 def build_html(result: dict[str, Any]) -> str:
     """Build the existing dual report and add stable shared interactions in place."""
 
-    # ctrip_report.cards_html resolves funnel_card at runtime. Replacing this
-    # global keeps the stable Ctrip report while rendering item 03 with the exact
-    # ctrip_ota_flow_conversion_30d score table.
-    stable_ctrip_report.funnel_card = flow_card
     upstream.build_ctrip_page = build_ctrip_page
     output = upstream.build_html(result)
     output = _strip_hidden_source_details(output)

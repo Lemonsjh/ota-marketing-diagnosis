@@ -5,6 +5,7 @@ from marketing_diagnosis.ctrip_flow import (
 )
 from marketing_diagnosis.ctrip_flow_report import card
 from marketing_diagnosis.ctrip_flow_rules import process
+from marketing_diagnosis.reporting_current import build_ctrip_html
 
 
 def flow_row(platform="ctrip"):
@@ -94,6 +95,15 @@ def test_flow_table_splits_ranking_into_a_separate_header():
     assert "成交订单" not in output
     assert "data-flow-tab='ctrip'" in output
     assert "data-flow-tab='qunar'" in output
+
+
+def test_ctrip_only_report_loads_funnel_tab_assets():
+    item = build_flow_item({"ctrip_business_metrics_funnel": [flow_row()]})
+    document = build_ctrip_html({"ctrip_items": {"3": item}})
+
+    assert "data-flow-tab='ctrip'" in document and "data-flow-tab='qunar'" in document
+    assert "id='CTRIP_FLOW_SCORE_TABLE_STABLE'" in document.split("</head>", 1)[0]
+    assert "id='CTRIP_FLOW_SCORE_TABLE_SCRIPT_STABLE'" in document.split("</body>", 1)[0]
 
 
 def test_final_rule_wrapper_replaces_old_item_03_and_refreshes_total():

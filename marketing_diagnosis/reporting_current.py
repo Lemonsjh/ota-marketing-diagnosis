@@ -11,6 +11,7 @@ from marketing_diagnosis import ctrip_flow_scoring_note as _ctrip_flow_scoring_n
 from marketing_diagnosis import ctrip_psi_table_compact as _ctrip_psi_table_compact
 from marketing_diagnosis import ctrip_rights_center_compact as _ctrip_rights_center_compact
 from marketing_diagnosis.channel_score_totals import patch_channel_score_totals
+from marketing_diagnosis.ctrip_flow_report import SCRIPT as FLOW_SCRIPT, STYLE as FLOW_STYLE
 from marketing_diagnosis.ctrip_manual_listing import patch_html
 from marketing_diagnosis.ctrip_page_entry_compact import patch_page_entry_html
 from marketing_diagnosis.meituan_market_report import patch_market_html
@@ -50,10 +51,11 @@ def _compact_business_travel(document: str) -> str:
 
 
 def build_ctrip_html(result: dict[str, Any]) -> str:
-    return patch_opening_html(patch_manual_supplements(
+    document = patch_opening_html(patch_manual_supplements(
         patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_ctrip_html(result)), result), result)), result),
         result,
     ), result)
+    return document.replace("</head>", FLOW_STYLE + "</head>", 1).replace("</body>", FLOW_SCRIPT + "</body>", 1)
 
 
 def build_dual_channel_html(result: dict[str, Any]) -> str:

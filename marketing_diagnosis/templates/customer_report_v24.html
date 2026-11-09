@@ -73,7 +73,29 @@ main{display:grid;gap:18px;min-width:0}section,.diagnosis-card{background:#fff;b
 .hidden-card{display:none!important}.empty-search{display:none;padding:25px;text-align:center;color:var(--muted)}
 @media(max-width:1100px){.page{grid-template-columns:1fr}.side{position:static;max-height:none;display:none}.hero-grid,.visual-grid.two{grid-template-columns:1fr}.detail-grid{grid-template-columns:1fr}.card-top{grid-template-columns:48px 1fr}.card-tags{grid-column:2;justify-content:flex-start}.metric-row,.metric-row.five,.source-cards{grid-template-columns:repeat(2,1fr)}.priority-grid,.delivery-list{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.topbar-inner{padding:11px 13px;align-items:flex-start;flex-direction:column}.page{padding:13px}.hero-grid,.source-standard,.formula-panel,.conflict-grid,.funnel-strip,.check-grid,.manual-options,.priority-grid,.delivery-list{grid-template-columns:1fr}.metric-row,.metric-row.five,.source-cards{grid-template-columns:1fr 1fr}.card-top{grid-template-columns:40px 1fr;padding:14px}.rule-no{width:36px;height:36px}.card-title h3{font-size:16px}.review-bottom{grid-template-columns:1fr}.section-head{flex-direction:column}.search{min-width:0;width:100%}}
-@media print{body{background:#fff}.topbar,.side,.toolbar{display:none!important}.page{display:block;max-width:none;padding:0}main{display:block}section,.diagnosis-card{box-shadow:none;border-radius:0;margin:0 0 14px;break-inside:avoid}.diagnosis-card{break-before:page}.rule-detail{display:block}details>summary{display:none}.result-area{background:#fff}}
+@media print {
+  body{background:#fff}
+  .topbar,.side,.toolbar{display:none!important}
+  .page{display:block;max-width:none;padding:0}
+  main{display:block}
+  section,.diagnosis-card{box-shadow:none;border-radius:0;margin:0 0 6px;overflow:visible}
+  .section-head,.card-top{padding:6px 10px;break-inside:avoid;break-after:avoid}
+  .section-body,.result-area{padding:6px 10px}
+  .result-area{background:#fff}
+  .rule-detail{display:block}
+  details>summary{display:none}
+  tr{break-inside:avoid}
+  .performance-chart-v54{break-inside:avoid}
+  .diagnosis-card .performance-chart-v54 .performance-svg-wrap-v54{height:220px!important;min-height:0!important}
+  .diagnosis-card .performance-detail-scroll-v55{overflow:visible;scrollbar-gutter:auto;padding-bottom:0}
+  .diagnosis-card :is(.performance-detail-scroll-v55,.performance-detail-v54) .performance-detail-table-v54{min-width:0!important}
+  .diagnosis-card .performance-detail-table-v54 :is(thead,tbody) tr{height:auto!important}
+  .diagnosis-card .performance-detail-table-v54 :is(th,td){min-width:0!important;padding:5px 4px!important;white-space:normal!important}
+  .diagnosis-card .performance-detail-table-v54 :is(th,td):first-child{position:static;width:16%!important;min-width:0!important;box-shadow:none}
+  .diagnosis-card .room-table-v30{min-width:0;table-layout:fixed}
+  .diagnosis-card .room-table-v30 :is(th,td){padding:5px 4px;white-space:normal;overflow-wrap:anywhere}
+  .diagnosis-card .room-table-v30 :is(th,td):first-child{position:static;width:24%;min-width:0}
+}
 
 
 /* v3：完整输出字段 */
@@ -98,7 +120,7 @@ main{display:grid;gap:18px;min-width:0}section,.diagnosis-card{background:#fff;b
 .field-list-inline{display:flex;flex-wrap:wrap;gap:5px}.field-list-inline span{display:inline-flex;min-height:22px;align-items:center;padding:0 7px;border-radius:5px;background:#f3f6f9;color:#43536a;font-size:11px}
 .scope-warning{margin-top:10px;padding:10px 12px;border-left:4px solid #d99a2b;background:#fff9eb;color:#77520e;font-size:12px}
 @media(max-width:980px){.common-field-grid{grid-template-columns:1fr}.output-fields-panel{margin:0 12px 14px}.output-table{min-width:820px}.master-field-table{min-width:900px}}
-@media print{.output-fields-panel{break-inside:avoid}.output-table{font-size:10px}.output-fields-head{background:#f5f5f5!important}}
+@media print{.output-table{font-size:10px}.output-fields-head{background:#f5f5f5!important;break-after:avoid}}
 
 /* v4 客户展示版 */
 .client-summary-grid{
@@ -252,10 +274,6 @@ details.metric-details[open] .metric-details-action-text::after {
 }
 
 @media print {
-  details.metric-details {
-    break-inside: avoid;
-  }
-
   details.metric-details > summary {
     display: none !important;
   }

@@ -47,7 +47,13 @@ STYLE = """<style id='REPORT_OPENING_STYLE'>
 @container(max-width:1000px){.opening-review{grid-template-columns:1fr 1fr}.opening-review>div:nth-child(3){border-left:0;padding-left:0}}
 @media(max-width:600px){.report-opening .card-top{padding:22px 18px 8px}.report-opening .result-area{padding:16px 18px 22px}.report-opening .card-title h3{font-size:22px}.opening-review{gap:24px 18px}.opening-review>div+div{padding-left:18px}.opening-rate strong{font-size:38px;letter-spacing:-1px}.opening-counts strong{font-size:28px}.opening-platform{grid-column:1/-1}.opening-review>div.opening-platform{border-left:0;padding:18px 0 0;border-top:1px solid #e1e8ec}.opening-platform h4{margin-bottom:12px}.opening-chart svg{min-width:500px}.opening-order-panel{gap:16px}.report-opening table{min-width:340px}}
 @media(max-width:600px){.opening-counts{grid-template-columns:1fr;gap:14px}.opening-counts small{font-size:14px;white-space:normal}}
-@media print{.report-opening article{break-inside:avoid}.opening-order-panel{grid-template-columns:1fr 1fr}.opening-chart svg{min-width:0}}
+@media print{
+  .report-opening{display:block;margin:8px 0}
+  .report-opening .diagnosis-card+.diagnosis-card{margin-top:8px}
+  .report-opening .card-top,.report-opening .result-area{padding:8px 10px}
+  .opening-order-panel{grid-template-columns:1fr 1fr;gap:10px}
+  .opening-chart svg{min-width:0}
+}
 </style>"""
 
 SCRIPT = """<script id='REPORT_OPENING_SCRIPT'>

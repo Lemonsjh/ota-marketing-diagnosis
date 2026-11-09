@@ -78,7 +78,6 @@ def _checkouts(cursor, table, hotel_id, yesterday, today, now):
         where += " AND snapshot_time<=%s"
         params.append(str(now))
     valid_order = f"NULLIF(TRIM({key}),'')"
-    total = _query(cursor, f"SELECT COUNT(DISTINCT {valid_order}) AS count FROM {_safe_identifier(table)} WHERE {where}", params)[0]["count"]
     counts = {platform: None for platform in PLATFORMS}
     source_fields = [field for field in ("order_source", "guest_source") if field in columns]
     if source_fields:
@@ -110,7 +109,7 @@ def _checkouts(cursor, table, hotel_id, yesterday, today, now):
             f"SELECT COUNT(DISTINCT {valid_order}) AS count FROM {_safe_identifier(table)} "
             f"WHERE {where} AND ({' OR '.join(matches)})", [*params, *match_params])
         counts["meituan"] = int(rows[0]["count"])
-    return {"total": int(total), **counts}
+    return counts
 
 
 def _pms_source(cursor, table, hotel_id, now):
@@ -242,7 +241,7 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
     diagnostics = []
     platforms = _enabled(cursor, hotel_id, requested, diagnostics)
     guest_table = tables.get("guest_stay_detail", "jd02_guest_stay_detail")
-    checkouts = dict.fromkeys(("total", *PLATFORMS))
+    checkouts = dict.fromkeys(PLATFORMS)
     try:
         checkouts = _checkouts(cursor, guest_table, hotel_id, yesterday, today, now)
     except Exception as exc:
@@ -280,7 +279,7 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested):
             points = []
         orders.append({"platform": platform, "daily_points": points})
     review_total = _sum([row["review_count"] for row in reviews])
-    checkout_total = _sum([row["checkout_orders"] for row in reviews]) if ctrip_ota else checkouts["total"]
+    checkout_total = _sum([row["checkout_orders"] for row in reviews])
     return {"as_of": str(now), "checkout_date": yesterday, "review_date": today,
             "order_period_start": order_start, "order_period_end": yesterday, "participates_in_score": False,
             "reviews": {"platforms": reviews, "total": {"review_count": review_total,

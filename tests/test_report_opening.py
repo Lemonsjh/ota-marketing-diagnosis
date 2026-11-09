@@ -133,10 +133,10 @@ class ReportOpeningTests(unittest.TestCase):
                        "order_source", "snapshot_time"}
             with patch("marketing_diagnosis.report_opening_data._table_columns", return_value=(columns, None)):
                 counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                self.assertEqual(counts, {"total": 6, "meituan": 3, "ctrip": 3})
+                self.assertEqual(counts, {"meituan": 3, "ctrip": 3})
                 conn.execute("UPDATE jd02 SET order_source='中介直连' WHERE order_id IN ('e','f')")
                 counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                self.assertEqual(counts, {"total": 6, "meituan": None, "ctrip": None})
+                self.assertEqual(counts, {"meituan": None, "ctrip": None})
                 conn.execute("ALTER TABLE jd02 ADD COLUMN member_level")
                 columns.add("member_level")
                 conn.execute("UPDATE jd02 SET member_level='美团' WHERE order_id IN ('b','e','x','y','z','g','')")
@@ -144,7 +144,7 @@ class ReportOpeningTests(unittest.TestCase):
                              "'中介直连','2026-10-30 15:30:00',NULL)")
                 counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
                 # Source-only a, both-fields b and membership-only e count once each.
-                self.assertEqual(counts, {"total": 6, "meituan": 3, "ctrip": None})
+                self.assertEqual(counts, {"meituan": 3, "ctrip": None})
 
     def test_designated_pms_deduplicates_main_checkin_id_and_recognizes_meituan_prepaid(self):
         for source in ("PMS（美团）", "PMS（别样红）"):
@@ -176,14 +176,14 @@ class ReportOpeningTests(unittest.TestCase):
                 columns = {item[1] for item in conn.execute("PRAGMA table_info(jd02)")}
                 with patch("marketing_diagnosis.report_opening_data._table_columns", return_value=(columns, None)):
                     counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                    self.assertEqual(counts, {"total": 4, "meituan": 3, "ctrip": None})
+                    self.assertEqual(counts, {"meituan": 3, "ctrip": None})
                     columns.remove("main_checkin_id")
                     with self.assertRaises(ValueError):
                         _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
                     columns.add("main_checkin_id")
                     conn.execute("UPDATE jd02 SET source_platform='PMS（住哲）'")
                     counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                    self.assertEqual(counts, {"total": 3, "meituan": 2, "ctrip": 1})
+                    self.assertEqual(counts, {"meituan": 2, "ctrip": 1})
 
     def test_ctrip_checkout_source_and_platform_sum_replace_pms_denominator(self):
         class OTACursor(Cursor):
@@ -230,7 +230,15 @@ class ReportOpeningTests(unittest.TestCase):
         cursor = Cursor(disabled=True)
         result = opening(cursor)
         self.assertEqual([r["platform"] for r in result["reviews"]["platforms"]], ["meituan"])
+        self.assertEqual(result["reviews"]["total"]["checkout_orders"], 2)
         self.assertFalse(any("ctrip_ota_" in sql for sql, _ in cursor.calls))
+
+    def test_checkout_total_requires_all_enabled_channel_counts(self):
+        with patch("marketing_diagnosis.report_opening_data._checkouts",
+                   return_value={"meituan": 1, "ctrip": None}):
+            total = opening()["reviews"]["total"]
+        self.assertIsNone(total["checkout_orders"])
+        self.assertIsNone(total["rate"])
 
     def test_missing_source_and_zero_denominator_are_not_zero_rates(self):
         for cursor in [Cursor(missing=True), Cursor(zero=True)]:

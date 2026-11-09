@@ -48,7 +48,7 @@ class CheckoutChannelSourceTests(unittest.TestCase):
                     ):
                         result = _checkouts(Cursor(), "jd02", "audit", "2026-11-05",
                                             "2026-11-06", "2026-11-06 12:00:00")
-                        self.assertEqual(result, {"total": 4, "meituan": 2, "ctrip": 2})
+                        self.assertEqual(result, {"meituan": 2, "ctrip": 2})
 
 
 if __name__ == "__main__":

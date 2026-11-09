@@ -95,9 +95,6 @@ def _checkouts(cursor, table, hotel_id, yesterday, today, now):
             matched = {platform_key(row.get(field)) for field in source_fields} - {None}
             for platform in matched:
                 counts[platform] += int(row["count"])
-        # Unattributed orders may belong to either OTA; exact platform totals are unknown.
-        if any(int(row["count"]) > 0 and not any(platform_key(row.get(field)) for field in source_fields) for row in rows):
-            counts = dict.fromkeys(PLATFORMS)
     if "member_level" in columns or "guest_source" in columns:
         patterns = ("%美团%", "%大众点评%", "%meituan%", "%dianping%")
         matches = [f"LOWER({field}) LIKE %s" for field in source_fields for _ in patterns]

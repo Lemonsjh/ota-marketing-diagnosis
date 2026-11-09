@@ -80,8 +80,18 @@ main{display:grid;gap:18px;min-width:0}section,.diagnosis-card{background:#fff;b
   main{display:block}
   section,.diagnosis-card{box-shadow:none;border-radius:0;margin:0 0 6px;overflow:visible}
   .section-head,.card-top{padding:6px 10px;break-inside:avoid;break-after:avoid}
+  .diagnosis-card>.card-top:has(>.rule-no){grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:8px}
+  .diagnosis-card>.card-top>.rule-no{width:28px;height:28px;font-size:13px}
+  .diagnosis-card>.card-top>.card-tags{grid-column:3;width:auto;max-width:340px;align-items:center;justify-content:flex-end;gap:4px}
+  .diagnosis-card .card-tags .title-meta-item{flex:0 1 auto;min-width:0;min-height:0;flex-direction:row;align-items:baseline;gap:4px;padding:3px 6px}
+  .diagnosis-card .card-tags .title-meta-item small{margin:0;white-space:nowrap}
+  .diagnosis-card .card-tags .title-meta-item strong{font-size:13px}
   .section-body,.result-area{padding:6px 10px}
   .result-area{background:#fff}
+  .diagnosis-card .ctrip-grid-v55{grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr));gap:6px}
+  .diagnosis-card .ctrip-metric-v55{min-height:0;padding:6px 8px;break-inside:avoid}
+  .diagnosis-card .ctrip-metric-v55 strong{margin-top:3px;font-size:16px}
+  .diagnosis-card .ctrip-metric-v55 span:empty{display:none}
   .rule-detail{display:block}
   details>summary{display:none}
   tr{break-inside:avoid}

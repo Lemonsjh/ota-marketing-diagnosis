@@ -7,14 +7,8 @@ from typing import Any
 from marketing_diagnosis.channel_score_totals import ctrip_direct_total
 
 
-_ARTICLE_RE = re.compile(
-    r"<article class='diagnosis-card'(?=[^>]*\bid='ctrip-rule-21')[\s\S]*?</article>",
-    re.IGNORECASE,
-)
-_SUMMARY_ROW_RE = re.compile(
-    r"<tr(?P<attrs>[^>]*)>(?P<body>[\s\S]*?href='#module-21'[\s\S]*?)</tr>",
-    re.IGNORECASE,
-)
+_ARTICLE_PATTERN = r"<article class='diagnosis-card'(?=[^>]*\bid='{card_id}')[\s\S]*?</article>"
+_SUMMARY_ROW_RE = re.compile(r"<tr\b[^>]*>[\s\S]*?</tr>", re.IGNORECASE)
 
 
 STYLE = """
@@ -64,8 +58,8 @@ def _storage_key(result: dict[str, Any]) -> str:
     return "s14:ctrip-listing:" + ":".join(str(value) for value in parts)
 
 
-def _card_html() -> str:
-    return """<article class='diagnosis-card' data-status='missing' data-title='挂牌 / 委托分销' id='ctrip-rule-21' data-channel-anchor='module-21'>
+def _card_html(card_id: str) -> str:
+    return f"""<article class='diagnosis-card' data-status='missing' data-title='挂牌 / 委托分销' id='{card_id}' data-channel-anchor='module-21'>
 <div class='card-top'><div class='rule-no'>21</div><div class='card-title'><h3>挂牌 / 委托分销</h3><p>改为人工录入，按原有挂牌等级规则计分。</p></div>
 <div class='card-tags'><div class='title-meta-item title-period'><small>统计周期</small><strong>当前值</strong></div><div class='title-meta-item title-score pending'><small>当前得分</small><div class='title-score-value'><strong data-ctrip-listing-card-score>待计算</strong><span>满分 6分</span></div></div><span class='status-badge pending' data-ctrip-listing-card-status>待人工录入</span></div></div>
 <div class='result-area ctrip-manual-listing'><div class='ctrip-grid-v55'><div class='ctrip-metric-v55'><small>人工录入结果</small><strong class='ctrip-pending-v55' data-ctrip-listing-result>待录入</strong><span>本项仅使用手工保存的结果</span></div><div class='ctrip-metric-v55'><small>评分规则</small><strong>0 / 3 / 6分</strong><span>满分6分，不改变原评分档位</span></div></div>
@@ -89,7 +83,7 @@ def _pending_summary_row(match: re.Match[str]) -> str:
     return row
 
 
-def _script(result: dict[str, Any]) -> str:
+def _script(result: dict[str, Any], card_id: str, summary_id: str, summary_link: str) -> str:
     base_total = _summary_base_total(result)
     key = json.dumps(_storage_key(result), ensure_ascii=False).replace("</", "<\\/")
     return f"""
@@ -103,7 +97,7 @@ def _script(result: dict[str, Any]) -> str:
   const BASE_TOTAL={base_total!r};
   const STORAGE_KEY={key};
   function setup(){{
-    const card=document.getElementById('ctrip-rule-21');
+    const card=document.getElementById('{card_id}');
     if(!card||card.dataset.manualListingBound==='1') return;
     card.dataset.manualListingBound='1';
     const select=card.querySelector('[data-ctrip-listing-select]');
@@ -114,8 +108,10 @@ def _script(result: dict[str, Any]) -> str:
     const scoreText=card.querySelector('[data-ctrip-listing-card-score]');
     const status=card.querySelector('[data-ctrip-listing-card-status]');
     const scoreBox=scoreText.closest('.title-score');
-    const summaryLink=document.querySelector("#ctrip-summary a[href='#module-21']");
+    const summaryLink=document.querySelector("#{summary_id} a[href='{summary_link}']");
     const summaryRow=summaryLink?summaryLink.closest('tr'):null;
+    const total=card.closest('.page')?.querySelector('.ctrip-overview-score strong');
+    if(total){{total.textContent=String(BASE_TOTAL);total.dataset.systemScore=String(BASE_TOTAL);}}
     function apply(code,announce){{
       const rule=SCORE_RULES[code];
       select.value=rule?code:'';
@@ -156,17 +152,25 @@ def _script(result: dict[str, Any]) -> str:
 """
 
 
-def patch_html(document: str, result: dict[str, Any]) -> str:
+def patch_html(document: str, result: dict[str, Any], *, standalone: bool = False) -> str:
     """Replace only Ctrip item 21 with a manual entry that keeps 0/3/6 scoring."""
 
-    if "id='ctrip-rule-21'" not in document or "CTRIP_MANUAL_LISTING_SCRIPT" in document:
+    card_id, summary_id, link = ("rule-21", "summary", "#rule-21") if standalone else (
+        "ctrip-rule-21", "ctrip-summary", "#module-21",
+    )
+    if f"id='{card_id}'" not in document or "CTRIP_MANUAL_LISTING_SCRIPT" in document:
         return document
-    document, count = _ARTICLE_RE.subn(_card_html(), document, count=1)
+    article = re.compile(_ARTICLE_PATTERN.format(card_id=card_id), re.IGNORECASE)
+    document, count = article.subn(_card_html(card_id), document, count=1)
     if not count:
         return document
-    document = _SUMMARY_ROW_RE.sub(_pending_summary_row, document, count=1)
+    summary = rf"<(?P<tag>section|details)\b(?=[^>]*\bid='{summary_id}')[\s\S]*?</(?P=tag)>"
+    document = re.sub(summary, lambda section: _SUMMARY_ROW_RE.sub(
+        lambda row: _pending_summary_row(row) if f"href='{link}'" in row.group() else row.group(),
+        section.group(),
+    ), document, count=1, flags=re.IGNORECASE)
     document = document.replace("</head>", STYLE + "</head>", 1)
-    document = document.replace("</body>", _script(result) + "</body>", 1)
+    document = document.replace("</body>", _script(result, card_id, summary_id, link) + "</body>", 1)
     return document
 
 

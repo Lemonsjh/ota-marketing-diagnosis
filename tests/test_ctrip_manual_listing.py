@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from marketing_diagnosis.ctrip_manual_listing import patch_html
+from marketing_diagnosis.reporting_current import build_ctrip_html
 
 
 def _document() -> str:
@@ -41,3 +42,20 @@ def test_patch_is_idempotent_and_does_not_touch_non_ctrip_reports() -> None:
     assert patch_html(once, result) == once
     meituan = "<html><head></head><body><article id='rule-21'>自动接单</article></body></html>"
     assert patch_html(meituan, result) == meituan
+
+
+def test_standalone_report_renders_current_items_10_and_21():
+    result = {"ctrip_items": {
+        "10": {"fields": [{"label": "酒店展示名称", "value": "测试酒店"}],
+               "listing_content": {"推荐词": "环境优美", "短标签": "免费WiFi"}},
+        "21": {"item_score": 3, "status": "success"},
+    }}
+    output = build_ctrip_html(result)
+
+    assert "id='rule-21' data-channel-anchor='module-21'" in output
+    assert "data-ctrip-listing-select" in output and "待人工录入" in output
+    assert "const BASE_TOTAL=0.0" in output
+    assert "#summary a[href='#rule-21']" in output
+    assert "id='S14_MANUAL_SUPPLEMENT_SCRIPT'" in output
+    assert "class='ctrip-listing-tag'>环境优美" in output
+    assert "class='ctrip-listing-tag'>免费WiFi" in output

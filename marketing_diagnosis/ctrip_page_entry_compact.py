@@ -5,10 +5,9 @@ import re
 from typing import Any
 
 
-_ARTICLE_RE = re.compile(
-    r"(?P<head><article class='diagnosis-card'(?=[^>]*\bid='ctrip-rule-10')[\s\S]*?<div class='result-area'>)"
-    r"[\s\S]*?(?P<tail></div></article>)",
-    re.IGNORECASE,
+_ARTICLE_PATTERN = (
+    r"(?P<head><article class='diagnosis-card'(?=[^>]*\bid='{card_id}')[\s\S]*?<div class='result-area'>)"
+    r"[\s\S]*?(?P<tail></div></article>)"
 )
 
 STYLE = """
@@ -83,11 +82,13 @@ def _content(item: dict[str, Any]) -> str:
     )
 
 
-def patch_page_entry_html(document: str, result: dict[str, Any]) -> str:
+def patch_page_entry_html(document: str, result: dict[str, Any], *, standalone: bool = False) -> str:
     item = _item(result)
     if not item or "CTRIP_PAGE_ENTRY_COMPACT_STYLE" in document:
         return document
-    document, count = _ARTICLE_RE.subn(
+    card_id = "rule-10" if standalone else "ctrip-rule-10"
+    article = re.compile(_ARTICLE_PATTERN.format(card_id=card_id), re.IGNORECASE)
+    document, count = article.subn(
         lambda match: match.group("head") + _content(item) + match.group("tail"),
         document,
         count=1,

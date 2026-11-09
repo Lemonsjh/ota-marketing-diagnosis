@@ -62,12 +62,18 @@ def _clean_ctrip_standalone(document: str) -> str:
     )
 
 
+def _patch_ctrip_standalone_details(document: str, result: dict[str, Any]) -> str:
+    document = patch_page_entry_html(document, result, standalone=True)
+    document = patch_html(document, result, standalone=True)
+    return patch_manual_supplements(document, result)
+
+
 def build_ctrip_html(result: dict[str, Any]) -> str:
-    document = patch_opening_html(patch_manual_supplements(
-        patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_ctrip_html(result)), result), result)), result),
-        result,
-    ), result)
+    document = patch_channel_score_totals(_compact_business_travel(_build_ctrip_html(result)), result)
+    document = patch_video_upload_copy(document)
     document = _clean_ctrip_standalone(document)
+    document = _patch_ctrip_standalone_details(document, result)
+    document = patch_opening_html(document, result)
     return document.replace("</head>", FLOW_STYLE + "</head>", 1).replace("</body>", FLOW_SCRIPT + "</body>", 1)
 
 

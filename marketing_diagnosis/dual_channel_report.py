@@ -259,6 +259,9 @@ def _strip_hidden_source_details(document: str) -> str:
     document = _PSI_SOURCE_RE.sub("", document)
     document = _CTRIP_SOURCE_RE.sub("", document)
     document = _CTRIP_COMPETITION_SOURCE_RE.sub("", document)
+    document = document.replace(
+        "<div class='notice'>未接入字段统一显示“待接入”，不会使用美团数据或示例值替代。</div>", "",
+    )
 
     # Mark the monthly time scope directly beside each competitor Top5 title.
     document = document.replace(

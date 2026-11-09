@@ -12,6 +12,10 @@ from marketing_diagnosis import ctrip_psi_table_compact as _ctrip_psi_table_comp
 from marketing_diagnosis import ctrip_rights_center_compact as _ctrip_rights_center_compact
 from marketing_diagnosis.channel_score_totals import patch_channel_score_totals
 from marketing_diagnosis.ctrip_flow_report import SCRIPT as FLOW_SCRIPT, STYLE as FLOW_STYLE
+from marketing_diagnosis.dual_channel_report import (
+    CTRIP_CLEANUP_STYLE, CTRIP_CONTENT_CLEANUP_SCRIPT, _strip_hidden_source_details,
+)
+from marketing_diagnosis.reporting_v22 import _remove_scope_selector
 from marketing_diagnosis.ctrip_manual_listing import patch_html
 from marketing_diagnosis.ctrip_page_entry_compact import patch_page_entry_html
 from marketing_diagnosis.meituan_market_report import patch_market_html
@@ -50,11 +54,20 @@ def _compact_business_travel(document: str) -> str:
     return re.sub(r"<article\b[^>]*\bid='(?:ctrip-)?rule-16'[^>]*>.*?</article>", compact, document, flags=re.S)
 
 
+def _clean_ctrip_standalone(document: str) -> str:
+    document = _remove_scope_selector(_strip_hidden_source_details(document))
+    document = document.replace("<div class='page'>", "<div class='page' data-channel-view='ctrip'>", 1)
+    return document.replace("</head>", CTRIP_CLEANUP_STYLE + "</head>", 1).replace(
+        "</body>", CTRIP_CONTENT_CLEANUP_SCRIPT + "</body>", 1,
+    )
+
+
 def build_ctrip_html(result: dict[str, Any]) -> str:
     document = patch_opening_html(patch_manual_supplements(
         patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_ctrip_html(result)), result), result)), result),
         result,
     ), result)
+    document = _clean_ctrip_standalone(document)
     return document.replace("</head>", FLOW_STYLE + "</head>", 1).replace("</body>", FLOW_SCRIPT + "</body>", 1)
 
 

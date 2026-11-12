@@ -11,8 +11,6 @@ from marketing_diagnosis.db_loader import _safe_identifier, _table_columns
 from marketing_diagnosis.meituan_market_share import market_room_nights
 
 
-PLATFORMS = ("meituan", "ctrip")
-MAIN_CHECKIN_PMS = {"PMS（美团）", "PMS（别样红）"}
 CTRIP_ROOM_NIGHTS = "inhouse_room_night"
 
 
@@ -68,67 +66,17 @@ def _enabled(cursor, hotel_id, requested, diagnostics):
         return list(requested)
 
 
-def _checkouts(cursor, table, hotel_id, yesterday, today, now):
-    columns = _columns(cursor, table, {"hotel_id", "business_date", "checkin_status"})
-    pms_source = _pms_source(cursor, table, hotel_id, now) if "source_platform" in columns else None
-    key = "main_checkin_id" if pms_source in MAIN_CHECKIN_PMS else "order_id"
-    if key not in columns:
-        raise ValueError("checkout_identity_column_missing")
-    where = "hotel_id=%s AND business_date>=%s AND business_date<%s AND checkin_status IN (%s,%s,%s)"
-    params = [hotel_id, yesterday, today, "已退房", "退房", "已结"]
-    if "snapshot_time" in columns:
-        where += " AND snapshot_time<=%s"
-        params.append(str(now))
-    valid_order = f"NULLIF(TRIM({key}),'')"
-    counts = {platform: None for platform in PLATFORMS}
-    source_fields = [field for field in ("order_source", "guest_source") if field in columns]
-    if source_fields:
-        # One order may have several guest rows. Pick its latest source without
-        # exporting names, order IDs or any accommodation detail to the report.
-        order = "snapshot_time DESC, id DESC" if "id" in columns and "snapshot_time" in columns else key
-        sources = ", ".join(source_fields)
-        rows = _query(cursor,
-            f"SELECT {sources}, COUNT(*) AS count FROM ("
-            f"SELECT {sources}, ROW_NUMBER() OVER (PARTITION BY {valid_order} ORDER BY {order}) AS rn "
-            f"FROM {_safe_identifier(table)} WHERE {where} AND {valid_order} IS NOT NULL"
-            f") AS stays WHERE rn=1 GROUP BY {sources}", params)
-        counts = dict.fromkeys(PLATFORMS, 0)
-        for row in rows:
-            matched = {platform_key(row.get(field)) for field in source_fields} - {None}
-            for platform in matched:
-                counts[platform] += int(row["count"])
-    if "member_level" in columns or "guest_source" in columns:
-        patterns = ("%美团%", "%大众点评%", "%meituan%", "%dianping%")
-        matches = [f"LOWER({field}) LIKE %s" for field in source_fields for _ in patterns]
-        match_params = list(patterns) * len(source_fields)
-        if "member_level" in columns:
-            matches.append("TRIM(member_level) IN (%s,%s)")
-            match_params.extend(("美团", "美团预付"))
-        rows = _query(cursor,
-            f"SELECT COUNT(DISTINCT {valid_order}) AS count FROM {_safe_identifier(table)} "
-            f"WHERE {where} AND ({' OR '.join(matches)})", [*params, *match_params])
-        counts["meituan"] = int(rows[0]["count"])
-    return counts
-
-
-def _pms_source(cursor, table, hotel_id, now):
-    columns = _columns(cursor, table, {"hotel_id", "source_platform"})
-    where, params, order = "hotel_id=%s", [hotel_id], []
-    if "snapshot_time" in columns:
-        where += " AND snapshot_time<=%s"
-        params.append(str(now))
-        order.append("snapshot_time DESC")
-    if "id" in columns:
-        order.append("id DESC")
-    sort = " ORDER BY " + ",".join(order) if order else ""
-    rows = _query(cursor, f"SELECT source_platform FROM {_safe_identifier(table)} WHERE {where}{sort} LIMIT 1", params)
-    return str(rows[0].get("source_platform") or "").strip() if rows else None
-
-
-def _ctrip_checkouts(cursor, table, hotel_id, yesterday, today, now):
-    columns = _columns(cursor, table, {"hotel_id", "order_id", "departure_date", "order_status", "order_status_type"})
-    where = "hotel_id=%s AND departure_date>=%s AND departure_date<%s AND order_status=%s AND order_status_type=%s"
-    params = [hotel_id, yesterday, today, "已过离店日期", "CheckIn"]
+def _ota_checkouts(cursor, table, platform, hotel_id, yesterday, today, now):
+    required = {"hotel_id", "order_id", "departure_date", "order_status"}
+    if platform == "ctrip":
+        required.add("order_status_type")
+    columns = _columns(cursor, table, required)
+    where = "hotel_id=%s AND departure_date>=%s AND departure_date<%s AND order_status=%s"
+    status = "已过离店日期" if platform == "ctrip" else "CONSUMED"
+    params = [hotel_id, yesterday, today, status]
+    if platform == "ctrip":
+        where += " AND order_status_type=%s"
+        params.append("CheckIn")
     if "snapshot_time" in columns:
         where += " AND snapshot_time<=%s"
         params.append(str(now))
@@ -137,13 +85,13 @@ def _ctrip_checkouts(cursor, table, hotel_id, yesterday, today, now):
     return int(rows[0]["count"])
 
 
-def _reviews(cursor, table, hotel_id, today, tomorrow, now):
+def _reviews(cursor, table, hotel_id, yesterday, today, now):
     columns = _columns(cursor, table, {"hotel_id", "review_time"})
     count = "COUNT(*)"
     if {"review_id", "id"}.issubset(columns):
         count = "COUNT(DISTINCT COALESCE(NULLIF(TRIM(review_id),''),CONCAT('row:',id)))"
-    where = "hotel_id=%s AND review_time>=%s AND review_time<%s AND review_time<=%s"
-    params = [hotel_id, today, tomorrow, str(now)]
+    where = "hotel_id=%s AND review_time>=%s AND review_time<%s"
+    params = [hotel_id, yesterday, today]
     if "snapshot_time" in columns:
         where += " AND snapshot_time<=%s"
         params.append(str(now))
@@ -219,38 +167,22 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested, *, meituan
     today = now.date().isoformat()
     yesterday = (now.date() - dt.timedelta(days=1)).isoformat()
     nights_start = (now.date() - dt.timedelta(days=7)).isoformat()
-    tomorrow = (now.date() + dt.timedelta(days=1)).isoformat()
     diagnostics = []
     platforms = _enabled(cursor, hotel_id, requested, diagnostics)
-    guest_table = tables.get("guest_stay_detail", "jd02_guest_stay_detail")
-    checkouts = dict.fromkeys(PLATFORMS)
-    try:
-        checkouts = _checkouts(cursor, guest_table, hotel_id, yesterday, today, now)
-    except Exception as exc:
-        diagnostics.append("checkouts_unavailable:" + type(exc).__name__)
-    source = None
-    if "ctrip" in platforms:
-        try:
-            source = _pms_source(cursor, guest_table, hotel_id, now)
-        except Exception as exc:
-            diagnostics.append("pms_source_unavailable:" + type(exc).__name__)
-    ctrip_ota = source in MAIN_CHECKIN_PMS
     reviews, room_nights = [], []
     for platform in platforms:
         scoped_id = ctrip_hotel_id if platform == "ctrip" else hotel_id
         count = None
         try:
-            count = _reviews(cursor, tables[f"{platform}_reviews"], scoped_id, today, tomorrow, now)
+            count = _reviews(cursor, tables[f"{platform}_reviews"], scoped_id, yesterday, today, now)
         except Exception as exc:
             diagnostics.append(platform + "_reviews_unavailable:" + type(exc).__name__)
-        denominator = checkouts[platform]
-        if platform == "ctrip" and ctrip_ota:
-            denominator = None
-            try:
-                denominator = _ctrip_checkouts(cursor, tables.get("ctrip_order_detail", "ctrip_ota_order_detail"),
-                                               scoped_id, yesterday, today, now)
-            except Exception as exc:
-                diagnostics.append("ctrip_checkouts_unavailable:" + type(exc).__name__)
+        denominator = None
+        try:
+            table = tables.get(f"{platform}_order_detail", f"{platform}_ota_order_detail")
+            denominator = _ota_checkouts(cursor, table, platform, scoped_id, yesterday, today, now)
+        except Exception as exc:
+            diagnostics.append(platform + "_checkouts_unavailable:" + type(exc).__name__)
         reviews.append({"platform": platform, "review_count": count, "checkout_orders": denominator,
                         "rate": count / denominator if count is not None and denominator else None})
         if platform == "meituan":
@@ -266,7 +198,7 @@ def load_opening(cursor, tables, hotel_id, ctrip_hotel_id, requested, *, meituan
         room_nights.append({"platform": platform, "daily_points": points})
     review_total = _sum([row["review_count"] for row in reviews])
     checkout_total = _sum([row["checkout_orders"] for row in reviews])
-    return {"as_of": str(now), "checkout_date": yesterday, "review_date": today,
+    return {"as_of": str(now), "checkout_date": yesterday, "review_date": yesterday,
             "participates_in_score": False,
             "reviews": {"platforms": reviews, "total": {"review_count": review_total,
                 "checkout_orders": checkout_total,

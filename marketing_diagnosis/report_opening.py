@@ -152,13 +152,14 @@ def opening_html(payload, prefix="opening"):
         + _metric("退房订单", _num(row["checkout_orders"]))
         + _metric("新增评论", _num(row["review_count"]))
         + _metric("点评率", _pct(row["rate"])) + "</div></div>" for row in reviews["platforms"])
+    review_day = "昨日" if payload["checkout_date"] == payload["review_date"] else "今日"
     review = ("<article class='diagnosis-card'><div class='card-top'><div class='card-title'><h3>昨日点评率</h3>"
               f"<p>{_text(payload['checkout_date'])} 退房 · {_text(payload['review_date'])} 新增评论</p></div></div>"
               f"<div class='result-area'><div class='opening-review' style='--opening-platforms:{len(reviews['platforms'])}'>"
-              "<div class='opening-rate' title='点评率＝今日新增评论数÷昨日退房订单数；美团含大众点评，携程含去哪儿。'>"
+              f"<div class='opening-rate' title='点评率＝{review_day}新增评论数÷昨日退房订单数。'>"
               + _metric("合计点评率", _pct(total["rate"]) if total["rate"] is not None else "暂不可计算", total["rate"] is None) + "</div><div class='opening-counts'>"
               + _metric("昨日退房订单", _num(total["checkout_orders"]))
-              + _metric("今日新增评论", _num(total["review_count"])) + "</div>" + platform_facts + "</div></div></article>")
+              + _metric(f"{review_day}新增评论", _num(total["review_count"])) + "</div>" + platform_facts + "</div></div></article>")
     panels = []
     series = [("total", "合计", market["daily_totals"]),
               *[(row["platform"], LABELS[row["platform"]], row["daily_points"]) for row in market["platforms"]]]

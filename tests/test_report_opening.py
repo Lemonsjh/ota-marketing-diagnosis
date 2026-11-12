@@ -1,6 +1,5 @@
 import copy
 import datetime as dt
-import sqlite3
 import unittest
 from unittest.mock import patch
 
@@ -8,7 +7,7 @@ from marketing_diagnosis.db_loader import DEFAULT_MYSQL_TABLES
 from marketing_diagnosis.latest import normalize_dataset, process
 from marketing_diagnosis.meituan_market_share import METRIC_CODE, SECTION
 from marketing_diagnosis.report_opening import patch_opening_html, _chart
-from marketing_diagnosis.report_opening_data import CTRIP_ROOM_NIGHTS, _checkouts, load_opening, room_night_totals
+from marketing_diagnosis.report_opening_data import CTRIP_ROOM_NIGHTS, load_opening, room_night_totals
 from marketing_diagnosis.reporting_current import build_html, build_markdown
 
 
@@ -19,16 +18,15 @@ MEITUAN_ROWS = [{"hotel_id": "audit", "metric_code": METRIC_CODE, "business_date
 
 
 class Cursor:
-    def __init__(self, disabled=False, missing=False, zero=False, pms_source="PMS（住哲）"):
+    def __init__(self, disabled=False, missing=False, zero=False):
         self.disabled, self.missing, self.zero = disabled, missing, zero
-        self.pms_source = pms_source
         self.calls = []
         self.rows = []
 
     def execute(self, sql, params=()):
         self.calls.append((sql, params))
         if sql.startswith("SHOW COLUMNS"):
-            if self.missing and "jd02" in sql:
+            if self.missing and "_ota_order_detail" in sql:
                 raise RuntimeError("missing_table")
             fields = {"id", "hotel_id", "business_date", "checkin_status", "order_id", "main_checkin_id",
                       "order_source", "snapshot_time", "review_time", "review_id",
@@ -38,12 +36,8 @@ class Cursor:
             self.rows = [{"Field": field} for field in fields]
         elif "FROM hotels" in sql:
             self.rows = [{"config_json": {"channels": ["meituan"] if self.disabled else ["meituan", "ctrip"]}}]
-        elif "ROW_NUMBER()" in sql:
-            self.rows = [] if self.zero else [{"order_source": "美团", "count": 2}, {"order_source": "携程", "count": 1}]
-        elif sql.startswith("SELECT source_platform"):
-            self.rows = [{"source_platform": self.pms_source}]
-        elif "jd02" in sql:
-            self.rows = [{"count": 0 if self.zero else 3}]
+        elif "meituan_ota_order_detail" in sql:
+            self.rows = [{"count": 0 if self.zero else 2}]
         elif "ctrip_ota_order_detail" in sql:
             self.rows = [{"count": 0 if self.zero else 1}]
         elif "review_detail" in sql:
@@ -90,17 +84,17 @@ class ReportOpeningTests(unittest.TestCase):
         self.assertEqual(nights["platforms"][1]["daily_points"][0]["hotel_count"], 10)
         self.assertEqual(nights["period_start"], "2026-10-23")
         self.assertEqual(result["checkout_date"], "2026-10-29")
-        self.assertEqual(result["review_date"], "2026-10-30")
+        self.assertEqual(result["review_date"], "2026-10-29")
 
     def test_sql_has_exact_scope_dates_status_and_order_dedup(self):
-        cursor = Cursor(pms_source="PMS（美团）")
+        cursor = Cursor()
         opening(cursor)
-        checkout = next((s, p) for s, p in cursor.calls if "ROW_NUMBER()" in s)
-        self.assertIn("PARTITION BY NULLIF(TRIM(main_checkin_id),'')", checkout[0])
-        self.assertIn("hotel_id=%s", checkout[0])
-        self.assertEqual(checkout[1][:6], ("audit", "2026-10-29", "2026-10-30", "已退房", "退房", "已结"))
+        self.assertFalse(any("jd02" in sql for sql, _ in cursor.calls))
+        mt_checkout = next((s, p) for s, p in cursor.calls if s.startswith("SELECT") and "meituan_ota_order_detail" in s)
+        self.assertIn("COUNT(DISTINCT NULLIF(TRIM(order_id)", mt_checkout[0])
+        self.assertEqual(mt_checkout[1][:4], ("audit", "2026-10-29", "2026-10-30", "CONSUMED"))
         review = next((s, p) for s, p in cursor.calls if "ctrip_ota_review_detail" in s and not s.startswith("SHOW"))
-        self.assertEqual(review[1][:3], ("ctrip-audit", "2026-10-30", "2026-10-31"))
+        self.assertEqual(review[1][:3], ("ctrip-audit", "2026-10-29", "2026-10-30"))
         self.assertIn("COUNT(DISTINCT", review[0])
         self.assertNotIn("review_content", review[0])
         checkout = next((s, p) for s, p in cursor.calls if s.startswith("SELECT") and "FROM `ctrip_ota_order_detail`" in s)
@@ -109,121 +103,6 @@ class ReportOpeningTests(unittest.TestCase):
         self.assertEqual(nights[:4], ("ctrip-audit", "2026-10-23", "2026-10-30", CTRIP_ROOM_NIGHTS))
         count = next(p for s, p in cursor.calls if s.startswith("SELECT") and "FROM `ctrip_ota_competition_metrics_30d`" in s)
         self.assertEqual(count[:2], ("ctrip-audit", CTRIP_ROOM_NIGHTS))
-
-    def test_checkout_status_aliases_keep_scope_and_deduplicate_guest_rows(self):
-        with sqlite3.connect(":memory:") as conn:
-            conn.row_factory = sqlite3.Row
-            conn.execute("CREATE TABLE jd02 (id, hotel_id, business_date, checkin_status, "
-                         "order_id, order_source, snapshot_time)")
-            rows = [(i, "audit", "2026-10-29", status, order, source, "2026-10-30 15:00:00")
-                    for i, (status, order, source) in enumerate([
-                        ("已退房", "a", "美团"), ("退房", "b", "美团"),
-                        ("退房", "b", "美团"), ("退房", "c", "携程"),
-                        ("已退房", "d", "携程"), ("退房", "e", "美团"),
-                        ("退房", "f", "携程"), ("在住", "g", "美团"),
-                        ("退房", "", "携程"),
-                    ])]
-            rows += [(20, "other", "2026-10-29", "退房", "x", "美团", "2026-10-30 15:00:00"),
-                     (21, "audit", "2026-10-28", "退房", "y", "美团", "2026-10-30 15:00:00"),
-                     (22, "audit", "2026-10-29", "退房", "z", "美团", "2026-10-30 17:00:00")]
-            conn.executemany("INSERT INTO jd02 VALUES (?,?,?,?,?,?,?)", rows)
-
-            class SqlCursor:
-                def execute(self, sql, params):
-                    self.cursor = conn.execute(sql.replace("%s", "?"), params)
-
-                def fetchall(self):
-                    return [dict(row) for row in self.cursor.fetchall()]
-
-            columns = {"id", "hotel_id", "business_date", "checkin_status", "order_id",
-                       "order_source", "snapshot_time"}
-            with patch("marketing_diagnosis.report_opening_data._table_columns", return_value=(columns, None)):
-                counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                self.assertEqual(counts, {"meituan": 3, "ctrip": 3})
-                conn.execute("UPDATE jd02 SET order_source='中介直连' WHERE order_id IN ('e','f')")
-                counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                self.assertEqual(counts, {"meituan": 2, "ctrip": 2})
-                conn.execute("ALTER TABLE jd02 ADD COLUMN member_level")
-                columns.add("member_level")
-                conn.execute("UPDATE jd02 SET member_level='美团' WHERE order_id IN ('b','e','x','y','z','g','')")
-                conn.execute("INSERT INTO jd02 VALUES (30,'audit','2026-10-29','退房','e',"
-                             "'中介直连','2026-10-30 15:30:00',NULL)")
-                counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                # Source-only a, both-fields b and membership-only e count once each.
-                self.assertEqual(counts, {"meituan": 3, "ctrip": 2})
-                conn.execute("UPDATE jd02 SET order_source=NULL WHERE order_id IN ('c','d')")
-                counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                self.assertEqual(counts, {"meituan": 3, "ctrip": 0})
-
-    def test_designated_pms_deduplicates_main_checkin_id_and_recognizes_meituan_prepaid(self):
-        for source in ("PMS（美团）", "PMS（别样红）"):
-            with self.subTest(source=source), sqlite3.connect(":memory:") as conn:
-                conn.row_factory = sqlite3.Row
-                conn.execute("CREATE TABLE jd02 (id, hotel_id, business_date, checkin_status, order_id, "
-                             "order_source, snapshot_time, member_level, main_checkin_id, source_platform)")
-                def row(i, order, main, channel="中介直连", member="美团预付", **changes):
-                    data = dict(id=i, hotel_id="audit", business_date="2026-10-29", checkin_status="已退房",
-                                order_id=order, order_source=channel, snapshot_time="2026-10-30 15:00:00",
-                                member_level=member, main_checkin_id=main, source_platform=source)
-                    data.update(changes)
-                    return tuple(data.values())
-                conn.executemany("INSERT INTO jd02 VALUES (?,?,?,?,?,?,?,?,?,?)", [
-                    row(1, None, "main-a"), row(2, None, "main-a", member=None),
-                    row(3, "shared-order", "main-b", "美团"), row(4, "shared-order", "main-c", "美团"),
-                    row(5, "ctrip-order", "main-d", "携程", None),
-                    row(6, "order-only", "", "美团"),
-                    row(7, "other", "other", hotel_id="other"),
-                    row(8, "old", "old", business_date="2026-10-28"),
-                    row(9, "inhouse", "inhouse", checkin_status="在住"),
-                    row(10, "future", "future", snapshot_time="2026-10-30 17:00:00"),
-                ])
-                class SqlCursor:
-                    def execute(self, sql, params):
-                        self.cursor = conn.execute(sql.replace("%s", "?"), params)
-                    def fetchall(self):
-                        return [dict(item) for item in self.cursor.fetchall()]
-                columns = {item[1] for item in conn.execute("PRAGMA table_info(jd02)")}
-                with patch("marketing_diagnosis.report_opening_data._table_columns", return_value=(columns, None)):
-                    counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                    self.assertEqual(counts, {"meituan": 3, "ctrip": 1})
-                    columns.remove("main_checkin_id")
-                    with self.assertRaises(ValueError):
-                        _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                    columns.add("main_checkin_id")
-                    conn.execute("UPDATE jd02 SET source_platform='PMS（住哲）'")
-                    counts = _checkouts(SqlCursor(), "jd02", "audit", "2026-10-29", "2026-10-30", NOW)
-                    self.assertEqual(counts, {"meituan": 2, "ctrip": 1})
-
-    def test_ctrip_checkout_source_and_platform_sum_replace_pms_denominator(self):
-        class OTACursor(Cursor):
-            unavailable = False
-
-            def execute(self, sql, params=()):
-                super().execute(sql, params)
-                if sql.startswith("SELECT") and "FROM `ctrip_ota_order_detail`" in sql:
-                    if self.unavailable:
-                        raise RuntimeError("ota_unavailable")
-                    self.rows = [{"count": 7}]
-
-        for source in ("PMS（美团）", "PMS（别样红）"):
-            result = opening(OTACursor(pms_source=source))
-            ctrip = result["reviews"]["platforms"][1]
-            self.assertEqual(ctrip["checkout_orders"], 7)
-            self.assertEqual(ctrip["rate"], 1 / 7)
-            self.assertEqual(result["reviews"]["total"]["checkout_orders"], 9)
-            self.assertEqual(result["reviews"]["total"]["rate"], 3 / 9)
-
-        cursor = OTACursor(pms_source="PMS（住哲）")
-        result = opening(cursor)
-        self.assertEqual(result["reviews"]["platforms"][1]["checkout_orders"], 1)
-        self.assertEqual(result["reviews"]["total"]["checkout_orders"], 3)
-        self.assertFalse(any("ctrip_ota_order_detail" in sql for sql, _ in cursor.calls))
-
-        cursor = OTACursor(pms_source="PMS（美团）")
-        cursor.unavailable = True
-        result = opening(cursor)
-        self.assertIsNone(result["reviews"]["platforms"][1]["checkout_orders"])
-        self.assertIsNone(result["reviews"]["total"]["rate"])
 
     def test_missing_room_night_dates_are_not_filled_or_counted_as_zero(self):
         def point(day, own, market):
@@ -244,8 +123,8 @@ class ReportOpeningTests(unittest.TestCase):
 
     def test_checkout_total_requires_all_enabled_channel_counts(self):
         for ctrip, expected in ((0, 1), (None, None)):
-            with self.subTest(ctrip=ctrip), patch("marketing_diagnosis.report_opening_data._checkouts",
-                       return_value={"meituan": 1, "ctrip": ctrip}):
+            with self.subTest(ctrip=ctrip), patch("marketing_diagnosis.report_opening_data._ota_checkouts",
+                       side_effect=[1, ctrip]):
                 total = opening()["reviews"]["total"]
             self.assertEqual(total["checkout_orders"], expected)
 
@@ -279,6 +158,8 @@ class ReportOpeningTests(unittest.TestCase):
             self.assertLess(opening_index, document.index("id='" + prefix + "summary'"))
         self.assertIn("33.33%", document)
         self.assertIn("美团入住间夜 · 携程在店间夜", document)
+        self.assertIn("昨日新增评论", document)
+        self.assertNotIn("今日新增评论", document)
         self.assertIn("近7天间夜与商圈占比", build_markdown(result))
         self.assertEqual(patch_opening_html(document, result), document)
         self.assertIn("昨日点评率", build_markdown(result))

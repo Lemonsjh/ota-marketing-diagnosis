@@ -56,6 +56,37 @@ class Blocks(HTMLParser):
                 self.nodes.append((*node, self.source.index(">", self.source_offset()) + 1))
 
 
+MEITUAN_CONFIG_GROUPS = {2: (19,), 3: (20,), 5: (15, 16, 17, 18), 7: (23,)}
+
+
+def _split_meituan_config(markup):
+    table = re.search(
+        r"(<table\b[^>]*>\s*<thead\b[^>]*>.*?</thead>\s*<tbody\b[^>]*>)(.*?)(</tbody>\s*</table>)",
+        markup, re.S,
+    )
+    if not table:
+        return {}
+    body = table[2]
+    parsed = Blocks(body)
+    if parsed.stack or any(tag != "tr" or not attrs.get("id") for tag, attrs, _, _ in parsed.nodes):
+        return {}
+    rows = {attrs["id"]: body[start:end] for _, attrs, start, end in parsed.nodes}
+    expected = {f"rule-{number}" for numbers in MEITUAN_CONFIG_GROUPS.values() for number in numbers}
+    if len(parsed.nodes) != len(expected) or rows.keys() != expected:
+        return {}
+
+    return {
+        group: (
+            "<article class='diagnosis-card config-status-group'>"
+            "<div class='result-area config-status-result'><div class='viz-card config-status-card'>"
+            "<div class='table-scroll'>" + table[1]
+            + "".join(rows[f"rule-{number}"] for number in numbers)
+            + table[3] + "</div></div></div></article>"
+        )
+        for group, numbers in MEITUAN_CONFIG_GROUPS.items()
+    }
+
+
 def _partition(body, channel, dual):
     groups = [[] for _ in TITLES]
     appendix, prefix, scripts = [], [], []
@@ -81,6 +112,12 @@ def _partition(body, channel, dual):
                     groups[mapping[key]].append(card)
             else:
                 appendix.append(markup)
+        elif channel == "meituan" and node_id == "config-status-group":
+            tables = _split_meituan_config(markup)
+            if not tables:
+                appendix.append(markup)
+            for group, config_table in tables.items():
+                groups[group].append(config_table)
         elif node_id in mapping:
             groups[mapping[node_id]].append(markup)
         else:

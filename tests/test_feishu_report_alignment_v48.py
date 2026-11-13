@@ -139,7 +139,7 @@ class FeishuReportAlignmentTests(unittest.TestCase):
         self.assertIn("支付订单 147", reply)
         self.assertIn("二转 9.08%", reply)
         self.assertIn("预订订单金额 ¥12,000.00", reply)
-        self.assertIn("昨日新增 7", reply)
+        self.assertNotIn("昨日新增", reply)
         self.assertIn("11 房型名称卖点优化：0/4｜得分为0", reply)
         self.assertNotIn("78.0/100", reply)
         self.assertNotIn("79,072", reply)

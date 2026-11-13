@@ -194,11 +194,10 @@ def _promotion_line(item: dict[str, Any]) -> str:
 def _reputation_line(item: dict[str, Any]) -> str:
     rating = _field_value(item, "美团评分", "meituan评分")
     review_count = _field_value(item, "美团点评条数", "meituan点评条数")
-    yesterday = _field_value(item, "昨日新增点评数")
     unreplied = _field_value(item, "美团未回复点评数", "meituan未回复点评数")
     return (
         f"- 13 口碑：美团评分 {_fmt_num(rating, 2)}｜点评 {_fmt_count(review_count)}｜"
-        f"昨日新增 {_fmt_count(yesterday)}｜未回复 {_fmt_count(unreplied)}｜得分 {_score_text(item)}"
+        f"未回复 {_fmt_count(unreplied)}｜得分 {_score_text(item)}"
     )
 
 

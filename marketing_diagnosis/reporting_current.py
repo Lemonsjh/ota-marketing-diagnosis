@@ -20,6 +20,7 @@ from marketing_diagnosis.ctrip_manual_listing import patch_html
 from marketing_diagnosis.ctrip_page_entry_compact import patch_page_entry_html
 from marketing_diagnosis.meituan_market_report import patch_market_html
 from marketing_diagnosis.meituan_recent_reviews import patch_recent_reviews_html
+from marketing_diagnosis.report_groups import organize_report_html
 from marketing_diagnosis.report_opening import patch_opening_html, opening_markdown
 from marketing_diagnosis.manual_supplement import patch_manual_supplements
 from marketing_diagnosis.visual_diagnosis import patch_video_upload_copy
@@ -74,33 +75,37 @@ def build_ctrip_html(result: dict[str, Any]) -> str:
     document = _clean_ctrip_standalone(document)
     document = _patch_ctrip_standalone_details(document, result)
     document = patch_opening_html(document, result)
-    return document.replace("</head>", FLOW_STYLE + "</head>", 1).replace("</body>", FLOW_SCRIPT + "</body>", 1)
+    document = document.replace("</head>", FLOW_STYLE + "</head>", 1).replace("</body>", FLOW_SCRIPT + "</body>", 1)
+    return organize_report_html(document, "ctrip")
 
 
 def build_dual_channel_html(result: dict[str, Any]) -> str:
     document = _single_channel_html(result)
     if document is not None:
         return document
-    return patch_opening_html(patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
+    document = patch_opening_html(patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
         patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_dual_channel_html(result)), result), result)), result),
         result,
     ), result), result), result)
+    return organize_report_html(document)
 
 
 def build_html(result: dict[str, Any]) -> str:
     document = _single_channel_html(result)
     if document is not None:
         return document
-    return patch_opening_html(patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
+    document = patch_opening_html(patch_recent_reviews_html(patch_market_html(patch_manual_supplements(
         patch_page_entry_html(patch_video_upload_copy(patch_html(patch_channel_score_totals(_compact_business_travel(_build_html(result)), result), result)), result),
         result,
     ), result), result), result)
+    return organize_report_html(document)
 
 
 def build_meituan_html(result: dict[str, Any]) -> str:
-    return patch_opening_html(patch_recent_reviews_html(
+    document = patch_opening_html(patch_recent_reviews_html(
         patch_market_html(patch_channel_score_totals(_build_meituan_html(result), result), result), result,
     ), result)
+    return organize_report_html(document, "meituan")
 
 
 def _single_channel_html(result):

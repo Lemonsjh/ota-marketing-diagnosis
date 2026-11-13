@@ -5,7 +5,7 @@ import re
 
 TITLES = (
     "经营结果与房型收益", "流量转化与市场竞争", "页面信息与产品展示", "价格政策与预订条件",
-    "口碑服务与酒店问答", "活动权益与渠道合作", "推广与扫码执行", "平台质量与接单履约",
+    "口碑与服务", "活动权益与渠道合作", "推广与扫码执行", "平台质量与接单履约",
 )
 
 # IDs here are the generated page anchors, which differ from displayed numbers.

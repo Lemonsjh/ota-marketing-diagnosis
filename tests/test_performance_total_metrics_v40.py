@@ -49,19 +49,35 @@ class PerformanceTotalMetricsTests(unittest.TestCase):
         patch_performance_yoy(result, {"hotel_performance_daily": rows})
         item = result["items"][0]
 
-        self.assertEqual([record["metric_name"] for record in item["records"]], list(METRIC_ORDER))
+        self.assertEqual([record["metric_name"] for record in item["records"]], ["房费", "平均房价", "出租率", "RevPar"])
         self.assertEqual(item["fields"][0]["value"], "2026-07-16")
         self.assertEqual(item["fields"][1]["value"], "2025-07-16")
         revenue = next(record for record in item["records"] if record["metric_name"] == "房费")
-        self.assertEqual(revenue["value_day"], 7)
-        self.assertEqual(revenue["previous_value_day"], 3.5)
+        self.assertEqual(revenue["value_day"], 1)
+        self.assertEqual(revenue["previous_value_day"], 0.5)
         self.assertAlmostEqual(revenue["yoy_day"], 1.0)
-        self.assertEqual(revenue["value_month"], 70)
-        self.assertEqual(revenue["previous_value_month"], 35)
+        self.assertEqual(revenue["value_month"], 10)
+        self.assertEqual(revenue["previous_value_month"], 5)
         self.assertAlmostEqual(revenue["yoy_month"], 1.0)
-        self.assertEqual(revenue["value_year"], 700)
-        self.assertEqual(revenue["previous_value_year"], 350)
+        self.assertEqual(revenue["value_year"], 100)
+        self.assertEqual(revenue["previous_value_year"], 50)
         self.assertEqual(item["item_score"], 10)
+
+    def test_current_values_remain_visible_when_prior_period_is_shorter(self):
+        result = self._result()
+        patch_performance_yoy(result, {"hotel_performance_daily": [
+            self._row("2026-11-13", "总房费", 30, 300, 300),
+            self._row("2025-11-08", "房费", 20, 200, 200),
+        ]})
+        item = result["items"][0]
+        self.assertEqual(item["data_status"], "partial")
+        self.assertIsNone(item["item_score"])
+        self.assertEqual(item["records"][0]["value_month"], 300)
+        self.assertIsNone(item["records"][0]["yoy_month"])
+        revenue = item["trend_periods"][-1]["metrics"][0]
+        self.assertEqual(revenue["current"], 300)
+        self.assertIsNone(revenue["previous"])
+        self.assertIsNone(revenue["yoy"])
 
     def test_monthly_revenue_decline_uses_the_same_yoy_for_scoring(self):
         rows = [
@@ -186,7 +202,7 @@ class PerformanceTotalMetricsTests(unittest.TestCase):
                               {"period_month": "2025-10", "room_revenue": 100}],
         })
         self.assertEqual(result["items"][0]["item_score"], 0)
-        self.assertEqual(result["items"][0]["records"][6]["value_month"], 70)
+        self.assertEqual(result["items"][0]["records"][0]["value_month"], 70)
 
     def test_current_pipeline_applies_jy03_comparison_to_both_channels(self):
         from marketing_diagnosis.latest import build_html, process

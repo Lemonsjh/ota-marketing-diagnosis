@@ -12,6 +12,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 from marketing_diagnosis.data import SECTIONS
 
 
+JL02_TREND_METRIC_NAMES = ("房费", "总房费", "平均房价", "平均房价ADR", "ADR", "出租率", "RevPar", "RevPAR值")
+
+
 DEFAULT_MYSQL_TABLES = {
     "jl02": "jl02_hotel_performance_daily",
     "jy03": "jy03_hotel_statistics_month",
@@ -143,6 +146,7 @@ def _profiled_fetch(
     period_end: str | None = None,
     order_candidates: tuple[str, ...] = (),
     extra_filters: list[tuple[str, str, Any]] | None = None,
+    metric_names: tuple[str, ...] = (),
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Query against actual columns while preserving every applied filter in diagnostics.
 
@@ -170,6 +174,12 @@ def _profiled_fetch(
             continue
         filters.append(f"{_safe_identifier(column)} {operator} %s")
         params.append(value)
+    if metric_names:
+        if "metric_name" not in columns:
+            return [], {"table": table, "rows": 0, "status": "error", "error": "required column missing: metric_name"}
+        placeholders = ",".join(["%s"] * len(metric_names))
+        filters.append(f"`metric_name` IN ({placeholders})")
+        params.extend(metric_names)
     order_by = ", ".join(f"{_safe_identifier(column)} {direction}" for column, direction in (
         (candidate.rsplit(" ", 1)[0], candidate.rsplit(" ", 1)[1].upper())
         for candidate in order_candidates if candidate.rsplit(" ", 1)[0] in columns
@@ -400,6 +410,8 @@ def load_mysql_dsn_dataset(
             rows, diag = _profiled_fetch(
                 cursor, table_map["jl02"], max(limit, 50000), hotel_id=hotel_id,
                 order_candidates=("snapshot_time DESC", "metric_name ASC"),
+                metric_names=JL02_TREND_METRIC_NAMES,
+                extra_filters=(("category", "=", "总营业指标"),),
             )
             diagnostics["tables"]["jl02"] = diag
             dataset["hotel_performance_daily"].extend(_tag_rows(rows, table_map["jl02"]))

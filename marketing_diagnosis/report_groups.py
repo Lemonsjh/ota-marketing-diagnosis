@@ -16,8 +16,13 @@ RULES = {
 VOID = frozenset("area base br col embed hr img input link meta param source track wbr".split())
 STYLE = """<style id="REPORT_GROUPS_STYLE">
 .report-topic-title{display:flex;align-items:baseline;gap:.7em;margin:28px 0 14px;padding:11px 14px;border-left:4px solid #16845b;background:#eaf5f0;color:#153a32;font-size:clamp(18px,2vw,24px);line-height:1.4;scroll-margin-top:95px}
-.report-topic-title small{font-size:.65em;color:#24664f;font-variant-numeric:tabular-nums}
-.report-topic-title~.diagnosis-card .rule-no{font-size:13px;white-space:nowrap}
+.report-topic-title small{font-size:.85em;color:#24664f;font-variant-numeric:tabular-nums}
+@media screen{
+.side a[href^='#topic-'] span{font-size:14px}
+.report-topic-title~.diagnosis-card .rule-no{width:100%;font-size:16px;letter-spacing:-.06em;white-space:nowrap}
+.report-topic-title~.config-status-group .config-rule-number{font-size:16px;white-space:nowrap}
+}
+.report-summary-ordinal{font-size:1.12em;white-space:nowrap}
 .report-topic-note{margin:0 0 16px;color:#526877;font-size:14px}
 @media print{.report-topic-title{margin:12px 0 6px;padding:5px 8px;font-size:15px;break-after:avoid;page-break-after:avoid}}
 </style>"""
@@ -139,7 +144,8 @@ def _number_summary(markup, labels):
         if label is None:
             return row
         return re.sub(r"(<td\b[^>]*>)\s*\d+\s*(</td>)",
-                      lambda cell: cell[1] + label + cell[2], row, count=1)
+                      lambda cell: cell[1] + f"<span class='report-summary-ordinal'>{label}</span>" + cell[2],
+                      row, count=1)
     return re.sub(r"<tr\b[^>]*>.*?</tr>", number_row, markup, flags=re.S)
 
 

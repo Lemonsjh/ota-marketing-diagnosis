@@ -17,6 +17,7 @@ VOID = frozenset("area base br col embed hr img input link meta param source tra
 STYLE = """<style id="REPORT_GROUPS_STYLE">
 .report-topic-title{display:flex;align-items:baseline;gap:.7em;margin:28px 0 14px;padding:11px 14px;border-left:4px solid #16845b;background:#eaf5f0;color:#153a32;font-size:clamp(18px,2vw,24px);line-height:1.4;scroll-margin-top:95px}
 .report-topic-title small{font-size:.65em;color:#24664f;font-variant-numeric:tabular-nums}
+.report-topic-title~.diagnosis-card .rule-no{font-size:13px;white-space:nowrap}
 .report-topic-note{margin:0 0 16px;color:#526877;font-size:14px}
 @media print{.report-topic-title{margin:12px 0 6px;padding:5px 8px;font-size:15px;break-after:avoid;page-break-after:avoid}}
 </style>"""
@@ -87,6 +88,51 @@ def _split_meituan_config(markup):
     }
 
 
+RULE_ANCHOR = re.compile(r"(?:ctrip-)?(?:rule|module)-(\d+)$")
+ITEM_BADGE = re.compile(r"(<div\b[^>]*class=['\"]rule-no['\"][^>]*>)[^<]*(</div>)")
+CONFIG_NUMBER = re.compile(r"(<td\b[^>]*class=['\"]config-rule-number['\"][^>]*>)[^<]*(</td>)")
+CONFIG_ROW = re.compile(r"<tr\b[^>]*id=['\"](rule-\d+)['\"][^>]*>.*?</tr>", re.S)
+
+
+def _number_items(cards, topic, labels):
+    index = 0
+    numbered = []
+    for card in cards:
+        def next_label(node_id):
+            nonlocal index
+            index += 1
+            label = f"{topic:02d}.{index}"
+            if match := RULE_ANCHOR.fullmatch(node_id):
+                labels[int(match[1])] = label
+            return label
+
+        def number_row(match):
+            label = next_label(match[1])
+            return CONFIG_NUMBER.sub(lambda cell: cell[1] + label + cell[2], match[0], count=1)
+
+        if CONFIG_ROW.search(card):
+            card = CONFIG_ROW.sub(number_row, card)
+        else:
+            node_id = re.search(r"\bid=['\"]([^'\"]+)['\"]", card.split(">", 1)[0])
+            label = next_label(node_id[1] if node_id else "")
+            card = ITEM_BADGE.sub(lambda badge: badge[1] + label + badge[2], card, count=1)
+        numbered.append(card)
+    return numbered
+
+
+def _number_summary(markup, labels):
+    def number_row(match):
+        row = match[0]
+        anchor = re.search(r"href=['\"]#([^'\"]+)['\"]", row)
+        key = RULE_ANCHOR.fullmatch(anchor[1]) if anchor else None
+        label = labels.get(int(key[1])) if key else None
+        if label is None:
+            return row
+        return re.sub(r"(<td\b[^>]*>)\s*\d+\s*(</td>)",
+                      lambda cell: cell[1] + label + cell[2], row, count=1)
+    return re.sub(r"<tr\b[^>]*>.*?</tr>", number_row, markup, flags=re.S)
+
+
 def _partition(body, channel, dual):
     groups = [[] for _ in TITLES]
     appendix, prefix, scripts = [], [], []
@@ -106,10 +152,13 @@ def _partition(body, channel, dual):
         elif "diagnosis-pair-v17" in classes:
             inner = markup[markup.index(">") + 1:markup.rfind("</div>")]
             pair = Blocks(inner)
-            cards = {(a.get("id") or "").removeprefix("ctrip-"): inner[s:e] for _, a, s, e in pair.nodes}
-            if not pair.stack and len(pair.nodes) == 2 and set(cards) == {"rule-7", "rule-8"}:
-                for key, card in cards.items():
-                    groups[mapping[key]].append(card)
+            card_nodes = [(a, s, e) for tag, a, s, e in pair.nodes if tag != "script"]
+            card_ids = {(a.get("id") or "").removeprefix("ctrip-") for a, _, _ in card_nodes}
+            if not pair.stack and len(card_nodes) == 2 and card_ids == {"rule-7", "rule-8"}:
+                for attrs, start, end in card_nodes:
+                    key = attrs["id"].removeprefix("ctrip-")
+                    groups[mapping[key]].append(inner[start:end])
+                scripts.extend(inner[s:e] for tag, _, s, e in pair.nodes if tag == "script")
             else:
                 appendix.append(markup)
         elif channel == "meituan" and node_id == "config-status-group":
@@ -126,18 +175,23 @@ def _partition(body, channel, dual):
         return None
 
     nav = []
+    labels = {}
+    overview_count = len(prefix)
     for number, (title, cards) in enumerate(zip(TITLES, groups), 1):
         anchor = f"topic-{number}"
         node_id = f"ctrip-{anchor}" if dual and channel == "ctrip" else anchor
         nav.append(f"<a href='#{anchor}'><span>{number:02d}</span>{title}</a>")
         prefix.append(f"<h2 class='report-topic-title' id='{node_id}' data-channel-anchor='{anchor}'><small>{number:02d}</small>{title}</h2>")
-        prefix.extend(cards or ["<p class='report-topic-note'>当前报告暂无此板块的独立模块。</p>"])
+        prefix.extend(_number_items(cards, number, labels) or ["<p class='report-topic-note'>当前报告暂无此板块的独立模块。</p>"])
     if appendix:
         node_id = "ctrip-topic-original" if dual and channel == "ctrip" else "topic-original"
         nav.append("<a href='#topic-original'><span>附</span>原报告附录</a>")
         prefix.append(f"<h2 class='report-topic-title' id='{node_id}' data-channel-anchor='topic-original'>原报告附录</h2>")
         prefix.append("<p class='report-topic-note'>保留跨板块汇总及未归类的原报告模块。</p>")
         prefix.extend(appendix)
+    prefix[:overview_count] = [_number_summary(part, labels) if re.match(
+        r"<(?:details|section)\b[^>]*id=['\"](?:ctrip-)?summary['\"]", part
+    ) else part for part in prefix[:overview_count]]
     return "\n".join(prefix + scripts), "".join(nav)
 
 

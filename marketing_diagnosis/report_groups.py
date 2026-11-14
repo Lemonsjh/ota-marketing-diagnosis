@@ -94,14 +94,24 @@ CONFIG_NUMBER = re.compile(r"(<td\b[^>]*class=['\"]config-rule-number['\"][^>]*>
 CONFIG_ROW = re.compile(r"<tr\b[^>]*id=['\"](rule-\d+)['\"][^>]*>.*?</tr>", re.S)
 
 
-def _number_items(cards, topic, labels):
+def _item_label(index):
+    digits = "零一二三四五六七八九"
+    tens, units = divmod(index, 10)
+    if tens == 0:
+        return f"（{digits[units]}）"
+    if tens >= 10:
+        return f"（{index}）"
+    return f"（{digits[tens] if tens > 1 else ''}十{digits[units] if units else ''}）"
+
+
+def _number_items(cards, labels):
     index = 0
     numbered = []
     for card in cards:
         def next_label(node_id):
             nonlocal index
             index += 1
-            label = f"{topic:02d}.{index}"
+            label = _item_label(index)
             if match := RULE_ANCHOR.fullmatch(node_id):
                 labels[int(match[1])] = label
             return label
@@ -182,7 +192,7 @@ def _partition(body, channel, dual):
         node_id = f"ctrip-{anchor}" if dual and channel == "ctrip" else anchor
         nav.append(f"<a href='#{anchor}'><span>{number:02d}</span>{title}</a>")
         prefix.append(f"<h2 class='report-topic-title' id='{node_id}' data-channel-anchor='{anchor}'><small>{number:02d}</small>{title}</h2>")
-        prefix.extend(_number_items(cards, number, labels) or ["<p class='report-topic-note'>当前报告暂无此板块的独立模块。</p>"])
+        prefix.extend(_number_items(cards, labels) or ["<p class='report-topic-note'>当前报告暂无此板块的独立模块。</p>"])
     if appendix:
         node_id = "ctrip-topic-original" if dual and channel == "ctrip" else "topic-original"
         nav.append("<a href='#topic-original'><span>附</span>原报告附录</a>")

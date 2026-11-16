@@ -1,6 +1,16 @@
 from marketing_diagnosis.report_groups import organize_report_html
 
 
+def test_review_rate_stays_on_overview_and_is_in_g5():
+    opening = "<section class='report-opening'><article class='diagnosis-card'><div class='card-top'><h3>昨日点评率</h3></div><strong>25%</strong></article><article>近7天间夜</article></section>"
+    source = "<head></head><nav class='side'></nav><main>" + opening + "<article id='rule-13'><div class='rule-no'>13</div>口碑分析</article></main>"
+    report = organize_report_html(source, "meituan")
+    assert report.count("昨日点评率") == 2
+    assert "昨日点评率" in report.split("id='topic-5'", 1)[1].split("id='topic-6'", 1)[0]
+    assert "（一）" in report.split("id='topic-5'", 1)[1].split("id='topic-6'", 1)[0]
+    assert report.count("近7天间夜") == 1
+
+
 def test_meituan_pair_is_grouped_with_its_chart_script_preserved():
     scan = "<article id='rule-7'><div class='rule-no'>07</div>扫码订单数据</article>"
     info = "<article id='rule-8'><div class='rule-no'>08</div><svg></svg>信息分数据</article>"

@@ -163,7 +163,16 @@ def _partition(body, channel, dual):
         classes = (attrs.get("class") or "").split()
         if tag == "script":
             scripts.append(markup)
-        elif node_id in ("overview", "summary") or "report-opening" in classes:
+        elif "report-opening" in classes:
+            prefix.append(markup)
+            inner = markup[markup.index(">") + 1:markup.rfind("</section>")]
+            opening = Blocks(inner)
+            review = next((inner[s:e] for tag, _, s, e in opening.nodes
+                           if tag == "article" and "昨日点评率" in inner[s:e]), None)
+            if review:
+                review = review.replace("<div class='card-top'>", "<div class='card-top'><div class='rule-no'></div>", 1)
+                groups[4].append("<section class='report-opening'>" + review + "</section>")
+        elif node_id in ("overview", "summary"):
             prefix.append(markup)
         elif "diagnosis-pair-v17" in classes:
             inner = markup[markup.index(">") + 1:markup.rfind("</div>")]

@@ -150,7 +150,7 @@ class ReportOpeningTests(unittest.TestCase):
         self.assertEqual(original["ctrip_items"], result["ctrip_items"])
         result.update(hotel_id="audit", hotel_name="测试酒店", period_start="2026-10-01", period_end="2026-10-30")
         document = build_html(result)
-        self.assertEqual(document.count("class='report-opening'"), 2)
+        self.assertEqual(document.count("class='report-opening'"), 4)
         for prefix in ("", "ctrip-"):
             overview = document.index("id='" + prefix + "overview'")
             opening_index = document.index("class='report-opening'", overview)

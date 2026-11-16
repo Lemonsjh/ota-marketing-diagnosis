@@ -67,16 +67,11 @@ def _enabled(cursor, hotel_id, requested, diagnostics):
 
 
 def _ota_checkouts(cursor, table, platform, hotel_id, yesterday, today, now):
-    required = {"hotel_id", "order_id", "departure_date", "order_status"}
-    if platform == "ctrip":
-        required.add("order_status_type")
+    status_column, status = ("order_status_type", "CheckIn") if platform == "ctrip" else ("order_status", "CONSUMED")
+    required = {"hotel_id", "order_id", "departure_date", status_column}
     columns = _columns(cursor, table, required)
-    where = "hotel_id=%s AND departure_date>=%s AND departure_date<%s AND order_status=%s"
-    status = "已过离店日期" if platform == "ctrip" else "CONSUMED"
+    where = f"hotel_id=%s AND departure_date>=%s AND departure_date<%s AND {status_column}=%s"
     params = [hotel_id, yesterday, today, status]
-    if platform == "ctrip":
-        where += " AND order_status_type=%s"
-        params.append("CheckIn")
     if "snapshot_time" in columns:
         where += " AND snapshot_time<=%s"
         params.append(str(now))

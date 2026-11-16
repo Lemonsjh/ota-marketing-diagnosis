@@ -33,6 +33,8 @@ class Cursor:
                       "metric_code", "metric_value", "metric_unit", "peer_average",
                       "competitor_rank", "competition_circle_hotel_count", "departure_date",
                       "order_status", "order_status_type", "source_platform"}
+            if "ctrip_ota_order_detail" in sql:
+                fields.remove("order_status")
             self.rows = [{"Field": field} for field in fields]
         elif "FROM hotels" in sql:
             self.rows = [{"config_json": {"channels": ["meituan"] if self.disabled else ["meituan", "ctrip"]}}]
@@ -98,7 +100,9 @@ class ReportOpeningTests(unittest.TestCase):
         self.assertIn("COUNT(DISTINCT", review[0])
         self.assertNotIn("review_content", review[0])
         checkout = next((s, p) for s, p in cursor.calls if s.startswith("SELECT") and "FROM `ctrip_ota_order_detail`" in s)
-        self.assertEqual(checkout[1][:5], ("ctrip-audit", "2026-10-29", "2026-10-30", "已过离店日期", "CheckIn"))
+        self.assertIn("order_status_type=%s", checkout[0])
+        self.assertNotIn("order_status=%s", checkout[0])
+        self.assertEqual(checkout[1], ("ctrip-audit", "2026-10-29", "2026-10-30", "CheckIn", str(NOW)))
         nights = next(p for s, p in cursor.calls if s.startswith("SELECT") and "FROM `ctrip_ota_business_metrics`" in s)
         self.assertEqual(nights[:4], ("ctrip-audit", "2026-10-23", "2026-10-30", CTRIP_ROOM_NIGHTS))
         count = next(p for s, p in cursor.calls if s.startswith("SELECT") and "FROM `ctrip_ota_competition_metrics_30d`" in s)

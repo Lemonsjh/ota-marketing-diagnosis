@@ -4,7 +4,7 @@ from marketing_diagnosis.channel_score_totals import ctrip_direct_total, meituan
 from marketing_diagnosis.ctrip_flow_rules import process
 
 
-def _visual_item(no: int, score: float, **values):
+def _visual_item(no: int, score: float | None, **values):
     return {
         "standard_item_id": no,
         "item_score": score,
@@ -13,10 +13,10 @@ def _visual_item(no: int, score: float, **values):
     }
 
 
-def test_ctrip_yoy_20_percent_gets_full_score_without_changing_meituan(monkeypatch):
+def test_ctrip_yoy_keeps_shared_pms_pending_score(monkeypatch):
     visual = {
         "items": [
-            _visual_item(1, 8, records=[{"metric_name": "房费", "yoy": 0.20}]),
+            _visual_item(1, None, data_status="pending_rule", records=[{"metric_name": "房费", "yoy": 0.20}]),
             _visual_item(2, 4.8),
         ]
     }
@@ -26,9 +26,8 @@ def test_ctrip_yoy_20_percent_gets_full_score_without_changing_meituan(monkeypat
     monkeypatch.setattr(ctrip_flow_rules, "upstream_process", lambda data: {"visual_diagnosis": visual, "ctrip_items": {}})
     result = process({"sections": {}})
 
-    assert result["ctrip_items"]["1"]["item_score"] == 10
-    assert meituan_direct_total(result) == 12.8
-    assert ctrip_direct_total(result) == 14.8
+    assert result["ctrip_items"]["1"] == visual["items"][0]
+    assert meituan_direct_total(result) == ctrip_direct_total(result) == 4.8
 
 
 def test_ctrip_scan_uses_five_point_boundaries(monkeypatch):

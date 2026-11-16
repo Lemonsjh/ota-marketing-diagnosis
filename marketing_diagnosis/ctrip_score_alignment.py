@@ -57,40 +57,6 @@ def _item(no: int, score: float | None, status: str, source: str, fields: list[d
     }
 
 
-def _ctrip_yoy_item(result: dict[str, Any]) -> dict[str, Any] | None:
-    visual = result.get("visual_diagnosis") or {}
-    base = next(
-        (
-            row for row in visual.get("items") or []
-            if isinstance(row, dict) and int(row.get("standard_item_id") or 0) == 1
-        ),
-        None,
-    )
-    if not base:
-        return None
-    item = copy.deepcopy(base)
-    revenue_yoy = None
-    for record in item.get("records") or []:
-        if not isinstance(record, dict) or _text(record.get("metric_name")) != "房费":
-            continue
-        revenue_yoy = _number(record.get("yoy"))
-        break
-    if revenue_yoy is None:
-        for field in item.get("fields") or []:
-            if isinstance(field, dict) and _text(field.get("label")) in {"本月YOY", "月度YOY"}:
-                revenue_yoy = _number(field.get("value"))
-                if revenue_yoy is not None and abs(revenue_yoy) > 1:
-                    revenue_yoy /= 100
-                break
-    if revenue_yoy is None:
-        return item
-    score = 10.0 if revenue_yoy >= 0.20 else 8.0 if revenue_yoy >= 0 else 6.0 if revenue_yoy >= -0.20 else 0.0
-    item["item_score"] = score
-    item["score_ratio"] = score / 10
-    item["data_status"] = "success"
-    return item
-
-
 def _has_yoyo_activity(sections: dict[str, Any]) -> bool:
     return any(
         _text(row.get("activity_name")) in _CTRIP_YOYO_ACTIVITY_NAMES
@@ -348,19 +314,13 @@ def _mark_partial_reputation(item: dict[str, Any] | None) -> None:
 
 def align_ctrip_scores(result: dict[str, Any], sections: dict[str, Any]) -> None:
     items = result.setdefault("ctrip_items", {})
-    yoy_item = _ctrip_yoy_item(result)
-    if yoy_item:
-        items["1"] = yoy_item
-    visual = result.get("visual_diagnosis") or {}
-    room_item = next(
-        (
-            row for row in visual.get("items") or []
-            if isinstance(row, dict) and int(row.get("standard_item_id") or 0) == 2
-        ),
-        None,
-    )
-    if room_item:
-        items["2"] = copy.deepcopy(room_item)
+    # Both channels use the same PMS operating data and scoring.
+    for row in (result.get("visual_diagnosis") or {}).get("items") or []:
+        if not isinstance(row, dict):
+            continue
+        item_id = int(row.get("standard_item_id") or 0)
+        if item_id in (1, 2):
+            items[str(item_id)] = copy.deepcopy(row)
     items["7"] = _scan_item(sections)
     _patch_promotion(items.get("9") or items.get(9))
     _patch_page_entry(items.get("10") or items.get(10), sections)

@@ -127,58 +127,48 @@ class FeishuReportAlignmentTests(unittest.TestCase):
             },
         }
 
-    def test_text_reply_uses_same_visual_score_and_fields_as_report(self):
-        reply = adapter.build_feishu_reply(self._result())
-        self.assertIn("美团得分：26.6/100", reply)
-        self.assertNotIn("总得分：", reply)
-        self.assertNotIn("折算得分", reply)
-        self.assertNotIn("原始得分", reply)
-        self.assertNotIn("已接入基础分", reply)
-        self.assertNotIn("未取到数据", reply)
-        self.assertIn("曝光 17,187", reply)
-        self.assertIn("支付订单 147", reply)
-        self.assertIn("二转 9.08%", reply)
-        self.assertIn("预订订单金额 ¥12,000.00", reply)
-        self.assertNotIn("昨日新增", reply)
-        self.assertIn("11 房型名称卖点优化：0/4｜得分为0", reply)
-        self.assertNotIn("78.0/100", reply)
-        self.assertNotIn("79,072", reply)
-        self.assertNotIn("M03", reply)
-
-    def test_card_reply_uses_the_same_report_summary(self):
-        card = adapter.build_feishu_card_reply(self._result())
-        content = "\n".join(
-            element.get("text", {}).get("content", "")
-            for element in card["card"]["elements"]
-            if element.get("tag") == "div"
-        )
-        self.assertIn("美团得分：26.6/100", content)
-        self.assertNotIn("总得分：", content)
-        self.assertIn("04 流量", content)
-        self.assertIn("09 推广", content)
-        self.assertIn("13 口碑", content)
-        self.assertNotIn("79,072", content)
-
-    def test_ctrip_summary_is_included_when_ctrip_data_is_connected(self):
+    def test_text_reply_summarizes_only_scored_report_items_without_numbers(self):
         result = self._result()
-        result["ctrip_summary"] = {
-            "total_score": 18.2,
-            "full_score": 27.0,
-            "connected_items": 16,
-            "scored_items": 15,
-        }
-
+        result["visual_diagnosis"]["items"].append({
+            "standard_item_id": 23, "item_name": "未知配置", "base_score": 1,
+            "item_score": 0, "data_status": "missing",
+        })
         reply = adapter.build_feishu_reply(result)
+        self.assertIn("美团｜26.6/100", reply)
+        self.assertIn("做得好：口碑分析", reply)
+        self.assertIn("待改善：房型名称卖点优化", reply)
+        self.assertIn(result["report_url"], reply)
+        for old in ("11 房型", "13 口碑", "0/4", "17,187", "用户来源", "未知配置"):
+            self.assertNotIn(old, reply)
+
+    def test_card_and_text_use_the_enabled_channel_scores(self):
+        result = self._result()
+        result["enabled_channels"] = ["ctrip"]
+        result["ctrip_items"] = {
+            "3": {"item_name": "平台流量漏斗", "item_score": 2, "full_score": 10, "data_status": "success"},
+            "8": {"item_name": "信息完整度", "item_score": 4, "full_score": 4, "data_status": "success"},
+            "21": {"item_name": "挂牌", "item_score": None, "full_score": 1, "data_status": "manual_pending"},
+        }
         card = adapter.build_feishu_card_reply(result)
         content = "\n".join(
-            element.get("text", {}).get("content", "")
+            element["text"]["content"]
             for element in card["card"]["elements"]
             if element.get("tag") == "div"
         )
+        for output in (adapter.build_feishu_reply(result), content):
+            self.assertIn("携程｜10.8/100", output)
+            self.assertIn("做得好：信息完整度", output)
+            self.assertIn("待改善：平台流量漏斗", output)
+            self.assertNotIn("美团", output)
+            self.assertNotIn("挂牌", output)
 
-        expected = "携程得分：23/100｜已接入 16 项｜已计分 15 项"
-        self.assertIn(expected, reply)
-        self.assertIn(expected, content)
+    def test_dual_channel_totals_are_shown_separately(self):
+        result = self._result()
+        result["enabled_channels"] = ["meituan", "ctrip"]
+        result["ctrip_summary"] = {"total_score": 18.2}
+        reply = adapter.build_feishu_reply(result)
+        self.assertIn("美团｜26.6/100", reply)
+        self.assertIn("携程｜23/100", reply)
 
 
 if __name__ == "__main__":

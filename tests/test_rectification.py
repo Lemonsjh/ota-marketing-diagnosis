@@ -53,6 +53,21 @@ def test_only_supported_facts_are_prefilled_and_statuses_are_distinct():
     assert rows["C23"]["goal"] == "完成10条问答"
 
 
+def test_meituan_daily_maintenance_matches_the_excel_template():
+    plan = build_plan(result())
+    rows = {row["id"]: row for row in plan["rows"]}
+    assert "M15" not in rows
+    assert rows["M25"]["title"] == "动销单维护"
+    assert rows["M25"]["stage"] == rows["M20"]["stage"] == "持续执行 每日维护"
+    assert rows["M25"]["goal"] == rows["C28"]["goal"] == "根据酒店当日出租率情况进行调整"
+    assert rows["M25"]["status"] == rows["C28"]["status"] == "待业务确认"
+    assert rows["M16"]["excel_row"] == 15 and rows["M25"]["excel_row"] == 19
+    book = load_workbook(BytesIO(base64.b64decode(_template(plan))))
+    for row in rows.values():
+        assert book[row["channel"]].cell(row["excel_row"], 2).value == row["title"]
+    assert "A4:A18 A19:A24" in str(book["美团"].merged_cells)
+
+
 def test_single_platform_workbook_keeps_layout_without_other_hotel_values():
     plan = build_plan({**result(), "enabled_channels": ["ctrip"]})
     assert len(plan["rows"]) == 29

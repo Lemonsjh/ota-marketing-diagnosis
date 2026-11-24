@@ -192,17 +192,6 @@ def _report_reference(code, platform, sources, result):
             fields["商品名称标注（以具体退改条款为准）"] = "、".join(rules)
         day = ((metrics.get("price_ladder") or {}).get("data_period") or {}).get("end")
         anchor, title = "topic-4", "商品价格与预订条件"
-    elif code == "M15":
-        audience = sources["M"].get(5, {})
-        for item in _values(audience.get("fields")):
-            label, value = item.get("label"), item.get("value")
-            if label == "统计月份":
-                fields[label] = value
-            if label in {"本地占比", "异地占比"} and isinstance(value, (int, float)) and 0 <= value <= 1:
-                fields[f"客群参考·{label}"] = f"{value:.1%}"
-        if len(fields) <= 1 and "统计月份" in fields:
-            fields = {}
-        anchor, title = "rule-5", "用户来源数据"
     evidence = [f"{label} {_field_text(value)}" for label, value in fields.items() if _field_text(value)]
     if evidence:
         if _date(day) and _date(result.get("period_end")) and not (
@@ -226,6 +215,7 @@ def build_plan(result):
         "M": {_item_id(item): item for item in _values((result.get("visual_diagnosis") or {}).get("items"))},
     }
     rows, stages = [], {}
+    sheet_rows = dict.fromkeys(CHANNELS, 3)
     for record in json.loads((ASSETS / "items.json").read_text(encoding="utf-8")):
         code = record["id"]
         prefix = code[0]
@@ -234,9 +224,11 @@ def build_plan(result):
             continue
         if record["stage"]:
             stages[prefix] = record["stage"]
-        row = {**record, "stage": stages.get(prefix, ""), "channel": name, "status": "待补资料", "facts": []}
+        sheet_rows[prefix] += 1
+        row = {**record, "stage": stages.get(prefix, ""), "channel": name,
+               "excel_row": sheet_rows[prefix], "status": "待补资料", "facts": []}
         anchor_prefix = "ctrip-" if prefix == "C" and "meituan" in enabled else ""
-        if code in {"C9", "C28"}:
+        if code in {"C9", "C28", "M25"}:
             row["status"] = "待业务确认"
         elif code in EVIDENCE:
             number, labels = EVIDENCE[code]

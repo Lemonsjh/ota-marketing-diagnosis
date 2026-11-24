@@ -222,7 +222,7 @@
     const sheetRows = new Map([...xml.getElementsByTagNameNS(sheetNs, "row")].map(row => [row.getAttribute("r"), row]));
     const widths = [24, 20, 22, 18, 10, 16, 16];
     for (const plan of data.rows.filter(row => row.channel === channelName)) {
-      const row = sheetRows.get(plan.id.slice(1));
+      const row = sheetRows.get(String(plan.excel_row));
       if (!row) throw new Error("Plan row missing in template");
       let lines = 1;
       exportValues(plan).forEach((value, index) => {

@@ -34,6 +34,7 @@
   const hasCurrent = row => row.facts.length || edits.get(row.id)?.facts?.trim();
   const isHeld = row => ["待业务确认", "暂不实施"].includes(row.status);
   const canFillCurrent = row => !isHeld(row) || row.allow_manual_current;
+  const canEditProgress = row => row.status !== "暂不实施";
   const isUnreliable = row => ["数据过期", "口径冲突"].includes(row.status);
 
   function element(tag, value, cls) {
@@ -105,7 +106,9 @@
       if (manual) td.append(element("p", "已补充 · " + manual, "plan-quiet plan-check"));
       return td;
     }
-    if (isHeld(row) && !(key === "facts" && canFillCurrent(row))) {
+    const editableHeldCell = (key === "facts" && canFillCurrent(row))
+      || (key === "progress" && canEditProgress(row));
+    if (isHeld(row) && !editableHeldCell) {
       if (key === "progress") td.append(element("span", row.status, "plan-quiet"));
       if (key === "goal") td.textContent = valueFor(row, key);
       return td;
@@ -211,9 +214,9 @@
     const reportFacts = row.facts.join("\n") || (isUnreliable(row) ? row.status : "");
     const current = [reportFacts, manual && (reportFacts ? "人工补充 · " + manual : manual)].filter(Boolean).join("\n");
     const previousCheck = edits.get(row.id)?.check?.trim();
-    const progress = isHeld(row) ? row.status : [
+    const progress = canEditProgress(row) ? [
       valueFor(row, "progress"), previousCheck && "验收 · " + previousCheck,
-    ].filter(Boolean).join("\n");
+    ].filter(Boolean).join("\n") : row.status;
     return [current, valueFor(row, "goal"), valueFor(row, "action"), progress,
       valueFor(row, "start"), valueFor(row, "due"), valueFor(row, "owner")];
   }

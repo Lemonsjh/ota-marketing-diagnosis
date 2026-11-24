@@ -323,6 +323,8 @@ class S14OperationDiagnosis:
             "report_json": paths["report_json"],
             "report_markdown": paths["report_markdown"],
         })
+        if plan_path := paths.get("rectification_html"):
+            skill_result["rectification_url"] = self._public_url(plan_path, prepared["output_root"])
         skill_result["feishu_message"] = build_feishu_reply(skill_result)
         skill_result["feishu_card"] = build_feishu_card_reply(skill_result)
 

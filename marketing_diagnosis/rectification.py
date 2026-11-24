@@ -16,6 +16,7 @@ from marketing_diagnosis.channel_score_totals import _item_id, _keyed_values, _v
 
 
 ASSETS = Path(__file__).parent / "templates" / "rectification"
+PLAN_FILENAME = "rectification.html"
 CHANNELS = {"C": ("ctrip", "携程"), "M": ("meituan", "美团")}
 # Only link individual facts that support this action, never use a score as evidence.
 EVIDENCE = {
@@ -168,30 +169,42 @@ def _template(plan):
     return base64.b64encode(output.getvalue()).decode("ascii")
 
 
-def patch_rectification(document, result):
-    """Keep diagnosis available even if the optional plan cannot be created."""
-    if not result.get("run_id") or not result.get("hotel_id") or "id='rectification-open'" in document:
-        return document
-    if "</header>" not in document or "</body>" not in document or "</head>" not in document:
-        return document
+def write_rectification(report_path, result):
+    """Write the plan beside its diagnosis. Keep the report usable on export failure."""
+    if not result.get("run_id") or not result.get("hotel_id"):
+        return None
     try:
         plan = build_plan(result)
         if not plan["rows"]:
-            return document
+            return None
         plan["workbook"] = _template(plan)
+        plan["report"] = Path(report_path).name
         payload = json.dumps(plan, ensure_ascii=False).replace("<", "\\u003c")
-        layout = (ASSETS / "dialog.html").read_text(encoding="utf-8").replace("{{HOTEL}}", escape(plan["hotel"]))
+        layout = (ASSETS / "dialog.html").read_text(encoding="utf-8")
+        layout = re.sub(r"\{\{(HOTEL|PERIOD|REPORT)\}\}", lambda match: escape({
+            "HOTEL": plan["hotel"], "PERIOD": plan["period"], "REPORT": plan["report"],
+        }[match[1]]), layout)
         style = (ASSETS / "dialog.css").read_text(encoding="utf-8")
         zip_js = (ASSETS / "fflate.js").read_text(encoding="utf-8")
         js = (ASSETS / "dialog.js").read_text(encoding="utf-8")
+        page = (layout.replace("</head>", f"<style>{style}</style></head>", 1)
+                .replace("</body>", f"<script type='application/json' id='rectification-data'>{payload}</script>"
+                         + f"<script>{zip_js}</script><script>{js}</script></body>", 1))
+        path = Path(report_path).with_name(PLAN_FILENAME)
+        # Write the complete page before publishing its link.
+        path.write_text(page, encoding="utf-8")
+        return str(path)
     except Exception:
         logging.getLogger(__name__).exception("Could not prepare the optional rectification plan")
-        return document
-    button = "<button type='button' id='rectification-open' class='btn'>整改计划</button>"
-    document = re.sub(r"(<button\b[^>]*>\s*导出报告\s*</button>)", lambda m: button + m[0],
+        return None
+
+
+def link_rectification(document):
+    link = f"<a id='rectification-open' class='btn' href='{PLAN_FILENAME}'>查看整改计划</a>"
+    document = re.sub(r"(<button\b[^>]*>\s*导出报告\s*</button>)", lambda match: link + match[0],
                       document, count=1)
-    if button not in document:
-        document = document.replace("</header>", button + "</header>", 1)
-    return (document.replace("</head>", f"<style>{style}</style></head>", 1)
-            .replace("</body>", layout + f"<script type='application/json' id='rectification-data'>{payload}</script>"
-                     + f"<script>{zip_js}</script><script>{js}</script></body>", 1))
+    if link not in document:
+        document = document.replace("</header>", link + "</header>", 1)
+    style = ("<style>#rectification-open{display:inline-flex;align-items:center;text-decoration:none;"
+             "white-space:nowrap;margin-inline-end:.5rem}@media print{#rectification-open{display:none}}</style>")
+    return document.replace("</head>", style + "</head>", 1)

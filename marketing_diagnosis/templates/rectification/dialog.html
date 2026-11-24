@@ -1,18 +1,51 @@
-<dialog id="rectification-dialog" aria-labelledby="rectification-title">
-  <header class="rect-head">
-    <div><p>{{HOTEL}}</p><h2 id="rectification-title">整改计划草案</h2></div>
-    <form method="dialog"><button type="submit" aria-label="关闭整改计划">关闭</button></form>
-  </header>
-  <div class="rect-toolbar">
-    <label>平台<select id="rectification-channel"></select></label>
-    <label>项目<select id="rectification-filter">
-      <option value="all">全部项目</option><option value="pending">未补齐</option><option value="edited">已补填</option>
-    </select></label>
-    <span id="rectification-count"></span>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{HOTEL}} · 整改计划</title>
+</head>
+<body>
+<header class="plan-header">
+  <div class="plan-wrap plan-head-layout">
+    <div>
+      <p class="plan-hotel">{{HOTEL}}</p>
+      <h1>整改计划</h1>
+      <p class="plan-period">诊断周期 <time>{{PERIOD}}</time></p>
+    </div>
+    <div class="plan-actions">
+      <a class="plan-back" href="{{REPORT}}">返回诊断报告</a>
+      <button type="button" class="plan-primary" id="rectification-download">下载 Excel</button>
+    </div>
   </div>
-  <div class="rect-content" id="rectification-rows"></div>
-  <footer class="rect-foot">
+</header>
+<main class="plan-wrap">
+  <div class="plan-controls">
+    <div id="rectification-channel" class="plan-channels" role="group" aria-label="整改计划平台"></div>
+    <div class="plan-filters">
+      <label>筛选<input id="rectification-search" type="search" placeholder="搜索项目或内容"></label>
+      <label>状态<select id="rectification-filter">
+        <option value="all">全部</option><option value="pending">待补充</option><option value="edited">已补填</option>
+      </select></label>
+    </div>
+  </div>
+  <div class="plan-meta">
+    <p id="rectification-count" aria-live="polite"></p>
     <p id="rectification-status" role="status">补填内容仅保存在当前浏览器。</p>
-    <button type="button" id="rectification-download">下载整改计划 Excel</button>
-  </footer>
+  </div>
+  <table class="plan-table" aria-label="整改计划明细">
+    <thead><tr><th scope="col">整改项目</th><th scope="col">现状与依据</th><th scope="col">整改计划</th><th scope="col">状态与操作</th></tr></thead>
+    <tbody id="rectification-rows"></tbody>
+  </table>
+  <p id="rectification-empty" class="plan-empty" hidden>当前筛选下没有项目。</p>
+  <noscript><p class="plan-empty">启用 JavaScript 后可查看计划、补填和下载 Excel。</p></noscript>
+</main>
+<dialog id="rectification-dialog" aria-labelledby="rectification-title">
+  <header class="plan-dialog-head">
+    <h2 id="rectification-title">补填整改计划</h2>
+    <form method="dialog"><button type="submit" class="plan-back">完成</button></form>
+  </header>
+  <div id="rectification-editor" class="plan-editor"></div>
 </dialog>
+</body>
+</html>

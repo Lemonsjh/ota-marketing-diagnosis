@@ -5,7 +5,7 @@
   const dialog = pick("dialog");
   const rows = pick("rows");
   const filter = pick("filter");
-  const channel = pick("channel");
+  const search = pick("search");
   const status = pick("status");
   const namespace = "s14:rectification:v1:" + JSON.stringify(data.key) + ":";
   const edits = new Map();
@@ -15,16 +15,18 @@
   ];
   const channels = [...new Set(data.rows.map(row => row.channel))];
   const sheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+  const selected = new URLSearchParams(location.search).get("channel") === "ctrip" ? "携程" : "美团";
+  let channel = channels.includes(selected) ? selected : channels[0];
+  let editingId = null;
 
-  for (const name of channels) channel.add(new Option(name, name));
   for (const row of data.rows) {
     try {
       const saved = JSON.parse(localStorage.getItem(namespace + row.id) || "{}");
+      const values = {};
       for (const [key] of fields) {
-        if (typeof saved?.[key] === "string") (row.saved ||= {})[key] = saved[key].slice(0, 400);
+        if (typeof saved?.[key] === "string") values[key] = saved[key].slice(0, 400);
       }
-      if (row.saved) edits.set(row.id, row.saved);
-      delete row.saved;
+      if (Object.keys(values).length) edits.set(row.id, values);
     } catch {
       status.textContent = "浏览器存储暂不可用，仍可在当前页面补填并下载。";
     }
@@ -32,7 +34,7 @@
 
   const hasEdits = row => fields.some(([key]) => edits.get(row.id)?.[key]?.trim());
   const isHeld = row => ["待业务确认", "暂不实施"].includes(row.status);
-  const isReady = row => !isHeld(row) && (row.status === "已带入部分现状" || edits.get(row.id)?.facts?.trim())
+  const isReady = row => !isHeld(row) && (row.facts.length || edits.get(row.id)?.facts?.trim())
     && fields.slice(1).every(([key]) => edits.get(row.id)?.[key]?.trim());
   function label(row) {
     if (isHeld(row)) return row.status;
@@ -48,66 +50,136 @@
     return el;
   }
 
-  function save(row, field, value, badge) {
+  const channelButtons = channels.map(name => {
+    const button = element("button", name);
+    button.type = "button";
+    button.addEventListener("click", () => {
+      channel = name;
+      render();
+    });
+    return button;
+  });
+  pick("channel").append(...channelButtons);
+
+  function save(row, field, value) {
     const draft = { ...edits.get(row.id), [field]: value };
     edits.set(row.id, draft);
-    badge.textContent = label(row);
     try {
       localStorage.setItem(namespace + row.id, JSON.stringify(draft));
       status.textContent = "已保存在当前浏览器。";
     } catch {
       status.textContent = "本机保存失败，请先下载 Excel 再关闭页面。";
     }
-    updateCount();
   }
 
-  function updateCount() {
-    const list = data.rows.filter(row => row.channel === channel.value);
-    pick("count").textContent = list.length + " 项 · " + list.filter(hasEdits).length + " 项已补填";
+  function line(container, title, value) {
+    const paragraph = element("p");
+    paragraph.append(element("span", title, "plan-field"), document.createTextNode(value));
+    container.append(paragraph);
   }
 
-  function rowElement(row) {
-    const details = element("details");
-    const summary = element("summary");
-    const badge = element("span", label(row), "rect-badge");
-    summary.append(element("strong", row.title), badge);
-    details.append(summary);
-    const facts = element("div", "", "rect-facts");
-    for (const fact of row.facts) facts.append(element("p", fact));
-    if (!row.facts.length) facts.append(element("p", "诊断现状 · " + row.status));
+  function evidence(row, showManual) {
+    const facts = element("div", "", "plan-cell-content");
+    row.facts.forEach((fact, index) => facts.append(element(
+      "p", fact, index === row.facts.length - 1 ? "plan-fact-date plan-quiet" : "plan-fact"
+    )));
+    if (!row.facts.length) facts.append(element("p", row.status, "plan-quiet"));
     if (row.anchor) {
-      const href = new URL(window.location.href);
+      const href = new URL(data.report, window.location.href);
       if (channels.length > 1) href.searchParams.set("channel", row.channel === "携程" ? "ctrip" : "meituan");
       href.hash = row.anchor;
       const link = element("a", "诊断依据 · " + row.evidence);
       link.href = href.href;
-      link.addEventListener("click", () => dialog.close());
       facts.append(link);
     }
-    details.append(facts);
-    if (isHeld(row)) return details;
-    const form = element("div", "", "rect-fields");
+    const additional = edits.get(row.id)?.facts?.trim();
+    if (showManual && additional) line(facts, "人工补充", additional);
+    return facts;
+  }
+
+  function editRow(row) {
+    editingId = row.id;
+    pick("title").textContent = "补填 · " + row.title;
+    const form = element("div");
     for (const [key, name] of fields) {
       const caption = element("label", name);
       const control = document.createElement(["owner", "start", "due"].includes(key) ? "input" : "textarea");
       control.maxLength = control.tagName === "INPUT" ? 60 : 400;
       control.value = edits.get(row.id)?.[key] || "";
       if (key === "start" || key === "due") control.placeholder = "日期或相对时间";
-      control.addEventListener("input", () => save(row, key, control.value, badge));
+      control.addEventListener("input", () => save(row, key, control.value));
       caption.append(control);
       form.append(caption);
     }
-    details.append(form);
+    pick("editor").replaceChildren(evidence(row, false), form);
+    dialog.showModal();
+  }
+
+  function planDetails(row) {
+    const details = element("div", "", "plan-cell-content");
+    const draft = edits.get(row.id) || {};
+    const recorded = fields.slice(1).filter(([key]) => draft[key]?.trim());
+    if (recorded.length) {
+      recorded.forEach(([key, name]) => line(details, name, draft[key].trim()));
+    } else {
+      const next = {
+        "暂不实施": "当前不安排实施。",
+        "待业务确认": "先确认项目定义和适用范围。",
+        "数据过期": "先更新本项数据，再确认措施。",
+        "口径冲突": "先复核数据口径，再确认措施。",
+        "待补资料": "先补齐资料，再填写目标和措施。",
+      };
+      const review = (row.status === "待补资料" || row.facts.length) && row.review;
+      if (review) {
+        line(details, "建议下一步", review);
+      } else {
+        details.append(element("p", next[row.status] || "根据诊断依据复核现状后，填写目标和措施。", "plan-note"));
+      }
+    }
     return details;
   }
 
+  function rowElement(row) {
+    const tr = element("tr");
+    const project = element("td");
+    project.append(element("strong", row.title, "plan-item"), element("span", row.stage, "plan-stage"));
+    const current = element("td");
+    current.dataset.label = "现状与依据";
+    current.append(evidence(row, true));
+    const plan = element("td");
+    plan.dataset.label = "整改计划";
+    plan.append(planDetails(row));
+    const actions = element("td");
+    const badge = element("span", label(row), "plan-state");
+    badge.dataset.tone = isReady(row) || row.status === "暂不实施" ? "neutral" : "pending";
+    actions.append(badge);
+    if (!isHeld(row)) {
+      const button = element("button", hasEdits(row) ? "编辑" : "补填", "plan-edit");
+      button.type = "button";
+      button.dataset.row = row.id;
+      button.setAttribute("aria-label", "编辑 " + row.title);
+      button.addEventListener("click", () => editRow(row));
+      const control = element("div");
+      control.append(button);
+      actions.append(control);
+    }
+    tr.append(project, current, plan, actions);
+    return tr;
+  }
+
   function render() {
-    const list = data.rows.filter(row => row.channel === channel.value && (
-      filter.value === "all" || (filter.value === "edited" ? hasEdits(row) : !isHeld(row) && !isReady(row))
+    const query = search.value.trim().toLowerCase();
+    const channelRows = data.rows.filter(row => row.channel === channel);
+    const list = channelRows.filter(row => (
+      (filter.value === "all" || (filter.value === "edited" ? hasEdits(row) : !isHeld(row) && !isReady(row)))
+      && (!query || [row.title, ...row.facts, ...Object.values(edits.get(row.id) || {})]
+        .join(" ").toLowerCase().includes(query))
     ));
+    channelButtons.forEach(button => button.setAttribute("aria-pressed", String(button.textContent === channel)));
     rows.replaceChildren(...list.map(rowElement));
-    if (!list.length) rows.append(element("p", "当前筛选下没有项目。"));
-    updateCount();
+    pick("empty").hidden = Boolean(list.length);
+    pick("count").textContent = "显示 " + list.length + " / " + channelRows.length + " 项 · "
+      + channelRows.filter(hasEdits).length + " 项已补填";
   }
 
   function setCell(xml, row, column, value) {
@@ -182,13 +254,12 @@
     }
   });
 
-  channel.addEventListener("change", render);
   filter.addEventListener("change", render);
-  pick("open").addEventListener("click", () => {
-    const current = new URLSearchParams(location.search).get("channel");
-    const name = current === "ctrip" ? "携程" : "美团";
-    channel.value = channels.includes(name) ? name : channels[0];
+  search.addEventListener("input", render);
+  dialog.addEventListener("close", () => {
     render();
-    dialog.showModal();
+    (rows.querySelector('[data-row="' + editingId + '"]') || search).focus();
+    editingId = null;
   });
+  render();
 })();

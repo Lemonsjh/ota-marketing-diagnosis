@@ -54,35 +54,43 @@ def _title(result: dict[str, Any]) -> str:
     return f"{hotel}｜OTA 诊断概览"
 
 
+def _report_links(result: dict[str, Any]) -> list[tuple[str, str]]:
+    links = []
+    if report_url := result.get("report_url"):
+        links.append(("查看完整诊断报告", report_url))
+    plan_url = result.get("rectification_url") or ""
+    if plan_url.startswith(("https://", "http://")):
+        links.append(("查看整改计划", plan_url))
+    return links
+
+
 def build_feishu_reply(result: dict[str, Any]) -> str:
-    report_url = result.get("report_url")
     channel_names = "、".join("美团" if c == "meituan" else "携程" for c in _enabled_channels(result))
     lines = [_title(result)]
     if channel_names:
         lines.append(f"渠道：{channel_names}")
     lines.extend(_channel_blocks(result))
-    if report_url:
-        lines.append(f"查看完整诊断报告：{report_url}")
+    lines.extend(f"{label}：{url}" for label, url in _report_links(result))
     return "\n\n".join(lines)
 
 
 def build_feishu_card_reply(result: dict[str, Any]) -> dict[str, Any]:
-    report_url = result.get("report_url")
     elements: list[dict[str, Any]] = [
         {"tag": "div", "text": {"tag": "lark_md", "content": block}}
         for block in _channel_blocks(result)
     ]
-    if report_url:
+    if links := _report_links(result):
         elements.append(
             {
                 "tag": "action",
                 "actions": [
                     {
                         "tag": "button",
-                        "text": {"tag": "plain_text", "content": "查看完整诊断报告"},
-                        "type": "primary",
-                        "url": report_url,
+                        "text": {"tag": "plain_text", "content": label},
+                        "type": "primary" if index == 0 else "default",
+                        "url": url,
                     }
+                    for index, (label, url) in enumerate(links)
                 ],
             }
         )

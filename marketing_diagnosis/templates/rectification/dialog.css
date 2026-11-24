@@ -1,37 +1,87 @@
-#rectification-open { margin-inline-end: .5rem; }
+:root {
+  color-scheme:light;
+  --ink:#21352d; --muted:#4d655a; --action:#17543f; --line:#dce4dc;
+  --paper:#f4f6f0; --sheet:#fff; --accent:#e5eee3;
+  font:16px/1.55 "Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif;
+}
+*,*::before,*::after { box-sizing:border-box; }
+body { margin:0; color:var(--ink); background:var(--paper); }
+button,input,select,textarea { font:inherit; color:inherit; }
+button,a { touch-action:manipulation; }
+a { color:var(--action); text-underline-offset:3px; }
+:focus-visible { outline:2px solid #24735b; outline-offset:3px; }
+.plan-wrap { max-width:1320px; padding-inline:clamp(16px,4vw,52px); margin-inline:auto; }
+.plan-header { background:#173c30; color:#fff; padding-block:clamp(22px,4vw,44px); }
+.plan-head-layout,.plan-controls,.plan-meta,.plan-dialog-head { display:flex; justify-content:space-between; gap:14px; align-items:center; }
+.plan-hotel,.plan-period { margin:0; color:#d8e7db; font-size:.9rem; overflow-wrap:anywhere; }
+.plan-header h1 { margin:3px 0 6px; font-size:clamp(2rem,4vw,3rem); line-height:1.1; }
+.plan-actions,.plan-channels,.plan-filters { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.plan-primary,.plan-back,.plan-channels button,.plan-edit {
+  text-decoration:none; display:inline-flex; align-items:center; justify-content:center;
+  min-height:42px; cursor:pointer; padding:7px 14px; border-radius:7px; border:1px solid var(--line);
+  background:var(--sheet); color:var(--action); font-weight:600;
+}
+.plan-header .plan-back { background:transparent; border-color:#739684; color:#fff; }
+.plan-primary { background:#d8edd2; border-color:#d8edd2; color:#123d2a; }
+.plan-controls { padding-top:24px; flex-wrap:wrap; }
+.plan-channels button { min-width:75px; }
+.plan-channels button[aria-pressed="true"] { background:var(--action); border-color:var(--action); color:#fff; }
+.plan-filters label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.88rem; }
+.plan-filters :is(input,select),.plan-editor :is(input,textarea) {
+  min-width:0; min-height:40px; border:1px solid #adbbb2; border-radius:7px; padding:7px 9px; background:var(--sheet);
+}
+.plan-filters input { width:min(220px,47vw); }
+.plan-meta { flex-wrap:wrap; gap:3px 12px; padding:8px 0; color:var(--muted); font-size:.85rem; }
+.plan-meta p { margin:0; }
+.plan-table {
+  width:100%; table-layout:fixed; border-collapse:separate; border-spacing:0;
+  background:var(--sheet); border:1px solid var(--line); border-radius:10px; overflow:hidden;
+  margin-bottom:24px;
+}
+.plan-table th { background:var(--accent); text-align:left; font-size:.875rem; }
+.plan-table th:first-child { width:18%; }
+.plan-table th:last-child { width:15%; }
+.plan-table :is(th,td) { padding:13px clamp(10px,1.4vw,19px); vertical-align:top; }
+.plan-table td { border-top:1px solid var(--line); overflow-wrap:anywhere; }
+.plan-table tr:nth-child(even) { background:#f9faf7; }
+.plan-item { display:block; font-size:1rem; line-height:1.45; }
+.plan-stage,.plan-quiet { color:var(--muted); font-size:.83rem; }
+.plan-stage { display:block; margin-top:5px; }
+.plan-cell-content p { margin:0 0 4px; white-space:pre-wrap; }
+.plan-cell-content p:last-child { margin-bottom:0; }
+.plan-fact { font-size:.92rem; }
+.plan-fact-date,.plan-cell-content a { font-size:.8rem; }
+.plan-note { color:var(--muted); }
+.plan-field { color:var(--muted); margin-right:6px; font-size:.8rem; font-weight:600; }
+.plan-state {
+  display:inline-block; background:var(--accent); color:#31563d; border-radius:5px; padding:3px 7px;
+  font-size:.8rem; margin-bottom:8px;
+}
+.plan-state[data-tone="pending"] { background:#f5ead5; color:#5e421e; }
+.plan-edit { font-size:.83rem; min-height:34px; padding:3px 10px; }
+.plan-empty { margin:16px 0 48px; color:var(--muted); }
 #rectification-dialog {
-  --rect-ink:#16382e; --rect-accent:#145744; --rect-line:#dbe4de; --rect-paper:#f5f8f5;
-  width:min(930px,calc(100vw - 28px)); max-height:min(90dvh,850px); margin:auto;
-  color:var(--rect-ink); background:white; border:1px solid var(--rect-line); border-radius:16px;
-  padding:0; box-shadow:0 24px 80px #17382c35; overflow:hidden;
+  margin:auto; width:min(660px,calc(100vw - 26px)); max-height:90dvh; color:var(--ink);
+  border:1px solid var(--line); border-radius:12px; background:var(--sheet); padding:0;
 }
-#rectification-dialog[open] { display:grid; grid-template-rows:auto auto minmax(0,1fr) auto; }
-#rectification-dialog::backdrop { background:#0a211a80; }
-#rectification-dialog :is(.rect-head,.rect-toolbar,.rect-foot) { display:flex; align-items:center; gap:1rem; padding:14px 22px; }
-#rectification-dialog :is(.rect-head,.rect-foot) { justify-content:space-between; }
-#rectification-dialog .rect-head { border-bottom:1px solid var(--rect-line); }
-#rectification-dialog .rect-head p { margin:0; color:#46675d; font-size:.84rem; }
-#rectification-dialog h2 { margin:2px 0 0; font-size:1.5rem; }
-#rectification-dialog .rect-toolbar { background:var(--rect-paper); flex-wrap:wrap; }
-#rectification-dialog .rect-toolbar label { display:flex; align-items:center; gap:.5rem; }
-#rectification-dialog :is(button,select,input,textarea) {
-  font:inherit; color:inherit; background:white; border:1px solid #b6c8bf;
-  border-radius:7px; padding:7px 10px; min-width:0;
+#rectification-dialog::backdrop { background:#0b241a80; }
+.plan-dialog-head { padding:16px 20px; border-bottom:1px solid var(--line); }
+.plan-dialog-head h2 { margin:0; font-size:1.2rem; overflow-wrap:anywhere; }
+.plan-editor { padding:16px 20px 22px; }
+.plan-editor > div:last-child { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px 14px; margin-top:12px; }
+.plan-editor label { display:grid; gap:4px; font-size:.9rem; }
+.plan-editor textarea { resize:vertical; min-height:65px; }
+@media (max-width:670px) {
+  .plan-head-layout { align-items:flex-start; flex-direction:column; }
+  .plan-table { border:0; border-radius:0; background:transparent; }
+  .plan-table thead { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; }
+  .plan-table :is(tbody,tr,td) { display:block; }
+  .plan-table tr { margin-bottom:12px; border:1px solid var(--line); border-radius:9px; background:var(--sheet); }
+  .plan-table td { padding:10px 14px; }
+  .plan-table td:first-child { border-top:0; }
+  .plan-table td:nth-child(2)::before,.plan-table td:nth-child(3)::before {
+    content:attr(data-label); display:block; color:var(--muted); font-size:.78rem; font-weight:600; margin-bottom:4px;
+  }
+  .plan-table td:last-child { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .plan-state { margin-bottom:0; }
 }
-#rectification-dialog button,#rectification-dialog summary { cursor:pointer; }
-#rectification-dialog :focus-visible { outline:2px solid #24735b; outline-offset:2px; }
-#rectification-dialog .rect-content { overflow:auto; padding:8px 22px 18px; }
-#rectification-dialog details { border-bottom:1px solid var(--rect-line); }
-#rectification-dialog summary { padding:12px 0; }
-#rectification-dialog summary strong { margin-inline:6px 10px; }
-#rectification-dialog .rect-badge { color:#46675d; font-size:.83rem; }
-#rectification-dialog .rect-facts { padding:10px 12px; background:var(--rect-paper); border-radius:7px; margin-bottom:10px; }
-#rectification-dialog .rect-facts p { margin:4px 0; overflow-wrap:anywhere; }
-#rectification-dialog .rect-facts a { color:var(--rect-accent); text-decoration:underline; }
-#rectification-dialog .rect-fields { display:grid; gap:10px 14px; grid-template-columns:repeat(auto-fit,minmax(195px,1fr)); margin:0 0 14px; }
-#rectification-dialog .rect-fields label { display:grid; gap:4px; font-size:.9rem; }
-#rectification-dialog textarea { resize:vertical; min-height:56px; }
-#rectification-dialog .rect-foot { border-top:1px solid var(--rect-line); flex-wrap:wrap; }
-#rectification-dialog .rect-foot p { margin:0; font-size:.85rem; color:#46675d; }
-#rectification-dialog #rectification-download { background:var(--rect-accent); border-color:var(--rect-accent); color:white; }
-@media print { #rectification-open,#rectification-dialog { display:none !important; } }

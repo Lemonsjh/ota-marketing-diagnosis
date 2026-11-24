@@ -4,7 +4,9 @@ from unittest.mock import patch
 
 from openpyxl import load_workbook
 
-from marketing_diagnosis.rectification import _template, build_plan, patch_rectification
+from marketing_diagnosis.latest import normalize_dataset, process
+from marketing_diagnosis.rectification import _template, build_plan, write_rectification
+from marketing_diagnosis.reporting_current import write_reports
 
 
 def result():
@@ -61,8 +63,21 @@ def test_single_platform_workbook_keeps_layout_without_other_hotel_values():
                for row in sheet for cell in row)
 
 
-def test_plan_failure_does_not_break_report():
-    report = "<head></head><body><header></header></body>"
-    assert "rectification-open" in patch_rectification(report, result())
+def test_plan_is_a_separate_page_with_a_report_link(tmp_path):
+    payload = {**process(normalize_dataset({})), "hotel_id": "zhiting", "run_id": "test"}
+    paths = write_reports(payload, tmp_path)
+    report = (tmp_path / "report.html").read_text(encoding="utf-8")
+    plan = (tmp_path / "rectification.html").read_text(encoding="utf-8")
+    assert paths["rectification_html"] == str(tmp_path / "rectification.html")
+    assert "href='rectification.html'" in report and "rectification-data" not in report
+    assert 'href="report.html"' in plan and "id='rectification-data'" in plan
+    assert "现状与依据" in plan and "下载 Excel" in plan
+
+
+def test_plan_failure_does_not_break_report(tmp_path):
+    payload = {**process(normalize_dataset({})), "hotel_id": "zhiting", "run_id": "test"}
     with patch("marketing_diagnosis.rectification._template", side_effect=OSError):
-        assert patch_rectification(report, result()) == report
+        paths = write_reports(payload, tmp_path)
+    assert "rectification_html" not in paths
+    assert "rectification-open" not in (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert not (tmp_path / "rectification.html").exists()

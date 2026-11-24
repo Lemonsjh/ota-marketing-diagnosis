@@ -14,6 +14,8 @@ Skill 输入使用 `hotel_id` 和 `data_source_mode`。报告数据源模式为 
 
 报告写入 `S14_REPORT_OUTPUT_DIR/<hotel_id>/multi/<start>_<end>/<run_id>/`，包含 HTML、JSON 和 Markdown。配置 `S14_PUBLIC_BASE_URL` 时，公开报告地址由该前缀和报告相对路径组成。未配置时 Skill 可能返回本地文件 URI，不能将它当作可供飞书用户访问的公开链接。
 
+整改草案生成成功时，同一运行目录包含 `rectification.html`，Skill 返回 `rectification_url`。报告和飞书使用独立的整改计划入口。网页补填内容保存在当前浏览器，可直接导出 Excel。
+
 普通飞书回复使用运行时的 `feishu_message`，只有真实生成且可访问的报告地址才能作为报告链接。结构化适配器可使用 `feishu_card`；CLI 文本流程不输出卡片 JSON、服务器路径或完整内部结果。报告不触发审批、价格、库存、推广或评论写入。
 
 ## 事实源

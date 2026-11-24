@@ -33,6 +33,7 @@
   const hasEdits = row => Object.values(edits.get(row.id) || {}).some(value => value.trim());
   const hasCurrent = row => row.facts.length || edits.get(row.id)?.facts?.trim();
   const isHeld = row => ["待业务确认", "暂不实施"].includes(row.status);
+  const canFillCurrent = row => !isHeld(row) || row.allow_manual_current;
   const isUnreliable = row => ["数据过期", "口径冲突"].includes(row.status);
 
   function element(tag, value, cls) {
@@ -104,7 +105,7 @@
       if (manual) td.append(element("p", "已补充 · " + manual, "plan-quiet plan-check"));
       return td;
     }
-    if (isHeld(row)) {
+    if (isHeld(row) && !(key === "facts" && canFillCurrent(row))) {
       if (key === "progress") td.append(element("span", row.status, "plan-quiet"));
       if (key === "goal") td.textContent = valueFor(row, key);
       return td;
@@ -176,7 +177,7 @@
     const query = search.value.trim().toLowerCase();
     const channelRows = data.rows.filter(row => row.channel === channel);
     const list = channelRows.filter(row => (
-      (filter.value === "all" || (filter.value === "edited" ? hasEdits(row) : !isHeld(row) && !hasCurrent(row)))
+      (filter.value === "all" || (filter.value === "edited" ? hasEdits(row) : canFillCurrent(row) && !hasCurrent(row)))
       && (!query || [row.title, ...row.facts, ...Object.values(edits.get(row.id) || {})]
         .join(" ").toLowerCase().includes(query))
     ));

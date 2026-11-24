@@ -53,6 +53,7 @@ def test_only_supported_facts_are_prefilled_and_statuses_are_distinct():
     assert rows["M4"]["status"] == "待补资料"
     assert rows["C9"]["status"] == rows["C28"]["status"] == "待业务确认"
     assert rows["C9"]["allow_manual_current"] is True
+    assert rows["C9"]["review"] == "开通云梯"
     assert rows["C23"]["status"] == "待补资料" and rows["C23"]["facts"] == []
     assert rows["C23"]["goal"] == "完成10条问答"
     assert rows["C23"]["review"] == "每天5条"
@@ -66,6 +67,8 @@ def test_meituan_daily_maintenance_matches_the_excel_template():
     assert rows["M25"]["stage"] == rows["M20"]["stage"] == "持续执行 每日维护"
     assert rows["M25"]["goal"] == rows["C28"]["goal"] == "根据酒店当日出租率情况进行调整"
     assert rows["M25"]["status"] == rows["C28"]["status"] == "待业务确认"
+    assert rows["C28"]["review"] == "根据后台提示补动销单"
+    assert rows["M25"]["review"] == "按平台后台提示维护动销单。"
     assert rows["M25"]["allow_manual_current"] is True
     assert rows["C28"]["allow_manual_current"] is True
     assert rows["M16"]["excel_row"] == 15 and rows["M25"]["excel_row"] == 19

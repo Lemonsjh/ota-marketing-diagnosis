@@ -39,6 +39,7 @@
     "title": "云梯",
     "allow_manual_current": true,
     "stage": "",
+    "review": "开通云梯",
     "goal": "开通云梯"
   },
   {
@@ -172,6 +173,7 @@
     "title": "动销单维护",
     "allow_manual_current": true,
     "stage": "",
+    "review": "根据后台提示补动销单",
     "goal": "根据酒店当日出租率情况进行调整"
   },
   {
@@ -312,6 +314,7 @@
     "title": "动销单维护",
     "allow_manual_current": true,
     "stage": "持续执行 每日维护",
+    "review": "按平台后台提示维护动销单。",
     "goal": "根据酒店当日出租率情况进行调整"
   },
   {

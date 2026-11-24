@@ -137,7 +137,7 @@
       || (key === "progress" && canEditProgress(row));
     if (isHeld(row) && !editableHeldCell) {
       if (key === "progress") td.append(element("span", row.status, "plan-quiet"));
-      if (key === "goal") td.textContent = valueFor(row, key);
+      if (key === "goal" || key === "action") td.textContent = valueFor(row, key);
       return td;
     }
     td.append(editableValue(row, key, label));

@@ -37,6 +37,7 @@
   {
     "id": "C9",
     "title": "云梯",
+    "allow_manual_current": true,
     "stage": "",
     "goal": "开通云梯"
   },

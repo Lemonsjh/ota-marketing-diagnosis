@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation
 from html import escape
 from io import BytesIO
 import json
@@ -202,6 +203,28 @@ def _report_reference(code, platform, sources, result):
     return evidence, anchor, title
 
 
+def _promotion_balance_fact(code, result):
+    if code == "M22":
+        channel, label = "meituan", "推广通账户余额"
+    elif code == "C32":
+        channel, label = "ctrip", "金字塔账户余额"
+    else:
+        return None
+    balance = (result.get("promotion_balances") or {}).get(channel) or {}
+    captured = balance.get("snapshot_time")
+    if not _date(captured):
+        return None
+    try:
+        amount = Decimal(str(balance.get("total_balance")))
+    except InvalidOperation:
+        return None
+    if not amount.is_finite():
+        return None
+    currency = balance.get("currency") or "CNY"
+    money = f"¥{amount:,.2f}" if currency == "CNY" else f"{amount:,.2f} {currency}"
+    return f"{label} {money}（采集时间 {captured}）"
+
+
 def build_plan(result):
     enabled = result.get("enabled_channels")
     if enabled is None:
@@ -241,6 +264,10 @@ def build_plan(result):
             facts, anchor, title = _report_reference(code, channel, sources, result)
             if facts:
                 row.update(status="已带入部分现状", facts=facts, evidence=title, anchor=anchor_prefix + anchor)
+        if balance := _promotion_balance_fact(code, result):
+            row["facts"].insert(0, balance)
+            if row["status"] == "待补资料":
+                row["status"] = "已带入部分现状"
         rows.append(row)
     return {
         "hotel": str(result.get("hotel_name") or result["hotel_id"]),

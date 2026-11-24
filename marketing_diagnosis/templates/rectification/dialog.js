@@ -211,7 +211,7 @@
 
   function exportValues(row) {
     const manual = valueFor(row, "facts").trim();
-    const reportFacts = row.facts.join("\n") || (isUnreliable(row) ? row.status : "");
+    const reportFacts = [...row.facts, ...(isUnreliable(row) ? [row.status] : [])].join("\n");
     const current = [reportFacts, manual && (reportFacts ? "人工补充 · " + manual : manual)].filter(Boolean).join("\n");
     const previousCheck = edits.get(row.id)?.check?.trim();
     const progress = canEditProgress(row) ? [

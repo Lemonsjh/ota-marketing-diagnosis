@@ -1,13 +1,16 @@
 import base64
 import re
+from datetime import datetime
+from decimal import Decimal
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from openpyxl import load_workbook
 
 from marketing_diagnosis.latest import normalize_dataset, process
 from marketing_diagnosis.metrics_core import promotion_metrics
 from marketing_diagnosis.rectification import _template, build_plan, write_rectification
+from marketing_diagnosis.rectification_balances import load_promotion_balances
 from marketing_diagnosis.reporting_current import write_reports
 
 
@@ -108,6 +111,44 @@ def test_rectification_reuses_platform_snapshots_with_their_actual_meaning():
     assert "商品名称标注（以具体退改条款为准） 入住当天18:00前免费取消" in rows["M13"]["facts"]
     assert "商品快照房型 双床房" in rows["M14"]["facts"]
     assert rows["M4"]["facts"] == []
+
+
+def test_promotion_balances_read_only_the_enabled_account_for_this_hotel():
+    cursor = Mock()
+    captured = datetime(2026, 11, 24, 9)
+    cursor.fetchall.return_value = [{"total_balance": Decimal("0.00"), "currency": "CNY", "snapshot_time": captured}]
+    balances = load_promotion_balances(cursor, "zhiting", ["meituan"])
+    assert balances == {"meituan": {"total_balance": "0.00", "currency": "CNY", "snapshot_time": str(captured)}}
+    cursor.execute.assert_called_once()
+    sql, params = cursor.execute.call_args.args
+    assert all(field in sql for field in ("hotel_id = %s", "platform_scope = %s", "promotion_type = %s",
+                                          "snapshot_time <= %s", "ORDER BY snapshot_time DESC LIMIT 1"))
+    assert params[:3] == ("zhiting", "meituan", "promotion_tong")
+    cursor.execute.side_effect = RuntimeError("optional source unavailable")
+    assert load_promotion_balances(cursor, "zhiting", ["ctrip"]) == {}
+    assert cursor.execute.call_args.args[1][:3] == ("zhiting", "ctrip", "pyramid")
+
+
+def test_promotion_balances_add_unscored_facts_to_the_correct_plan_rows():
+    payload = result()
+    payload["visual_diagnosis"]["items"].append({
+        "standard_item_id": 9, "data_status": "success",
+        "fields": [{"label": "近30天推广投入", "value": 500}],
+    })
+    balances = {
+        "meituan": {"total_balance": "0.00", "snapshot_time": "2026-11-24 09:00:00"},
+        "ctrip": {"total_balance": "101.25", "snapshot_time": "2026-11-24 10:00:00"},
+    }
+    data = normalize_dataset({"promotion_balances": balances})
+    with patch("marketing_diagnosis.hotel_profiles.channels", return_value={"meituan", "ctrip"}), \
+         patch("marketing_diagnosis.latest._process", return_value=payload):
+        payload = process(data)
+    rows = {row["id"]: row for row in build_plan(payload)["rows"]}
+    assert rows["M22"]["facts"][:2] == ["推广通账户余额 ¥0.00（采集时间 2026-11-24 09:00:00）", "近30天推广投入 500"]
+    assert rows["C32"]["facts"] == ["金字塔账户余额 ¥101.25（采集时间 2026-11-24 10:00:00）"]
+    assert rows["C32"]["status"] == "已带入部分现状"
+    payload["promotion_balances"]["ctrip"]["total_balance"] = None
+    assert next(row for row in build_plan(payload)["rows"] if row["id"] == "C32")["facts"] == []
 
 
 def test_meituan_rectification_lists_only_registration_activities():

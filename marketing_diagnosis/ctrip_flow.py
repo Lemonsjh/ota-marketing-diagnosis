@@ -256,12 +256,15 @@ def load_mysql_dsn_dataset(
         with conn.cursor() as cursor:
             from marketing_diagnosis.report_opening_data import load_opening
             from marketing_diagnosis.meituan_market_share import SECTION
+            from marketing_diagnosis.rectification_balances import load_promotion_balances
 
+            enabled = base._enabled_platforms(platform)
             dataset["report_opening"] = load_opening(
-                cursor, table_map, hotel_id, ctrip_id, base._enabled_platforms(platform),
+                cursor, table_map, hotel_id, ctrip_id, enabled,
                 meituan_rows=dataset.get(SECTION, ()),
             )
-            if "ctrip" not in base._enabled_platforms(platform):
+            dataset["promotion_balances"] = load_promotion_balances(cursor, hotel_id, enabled)
+            if "ctrip" not in enabled:
                 for section in ("ctrip_business_metrics_funnel", "ctrip_promotion_activity",
                                 "ctrip_promotion_activity_performance", "ctrip_video_upload_status"):
                     dataset.setdefault(section, [])

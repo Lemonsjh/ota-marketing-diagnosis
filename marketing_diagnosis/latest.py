@@ -50,6 +50,12 @@ def process(data):
                 sections[section] = rows
         data = {**data, "sections": sections}
     result = _process(data)
+    balances = data.get("promotion_balances") or {}
+    if balances:
+        result["promotion_balances"] = {
+            channel: balance for channel, balance in balances.items()
+            if enabled is None or channel in enabled
+        }
     if enabled is not None:
         result["enabled_channels"] = sorted(enabled)
         if "ctrip" not in enabled:
@@ -60,8 +66,9 @@ def process(data):
 def normalize_dataset(raw):
     """Preserve Ctrip-specific records required by the final scoring rules."""
     result = _normalize_dataset(raw)
-    if isinstance(raw.get("report_opening"), dict):
-        result["report_opening"] = raw["report_opening"]
+    for key in ("report_opening", "promotion_balances"):
+        if isinstance(raw.get(key), dict):
+            result[key] = raw[key]
     sections = result.setdefault("sections", {})
     diagnostics = result.setdefault("diagnostics", {})
     for section in (

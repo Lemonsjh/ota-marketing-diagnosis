@@ -65,13 +65,14 @@
   }
 
   function valueFor(row, key) {
-    return edits.get(row.id)?.[key] ?? (key === "action" ? row.review || "" : "");
+    const defaults = {goal: row.goal, action: row.review};
+    return edits.get(row.id)?.[key] ?? defaults[key] ?? "";
   }
 
   function evidence(row) {
     const facts = element("div", "", "plan-cell-content");
     row.facts.forEach((fact, index) => {
-      const last = index === row.facts.length - 1;
+      const last = row.facts.length > 1 && index === row.facts.length - 1;
       if (last && fact.startsWith("报告周期 ")) return;
       facts.append(element("p", fact, last ? "plan-fact-date plan-quiet" : "plan-fact"));
     });
@@ -98,8 +99,14 @@
   function inputCell(row, key, label) {
     const td = cell("td", label);
     if (key === "facts" && (row.facts.length || isUnreliable(row))) td.append(evidence(row));
+    if (key === "facts" && row.facts.length) {
+      const manual = valueFor(row, key).trim();
+      if (manual) td.append(element("p", "已补充 · " + manual, "plan-quiet plan-check"));
+      return td;
+    }
     if (isHeld(row)) {
       if (key === "progress") td.append(element("span", row.status, "plan-quiet"));
+      if (key === "goal") td.textContent = valueFor(row, key);
       return td;
     }
     const input = document.createElement("textarea");
@@ -107,7 +114,7 @@
     input.maxLength = ["owner", "start", "due"].includes(key) ? 60 : 400;
     input.setAttribute("aria-label", row.title + " · " + label);
     input.value = valueFor(row, key);
-    if (key === "facts") input.placeholder = row.facts.length ? "补充现状" : "填写现状";
+    if (key === "facts") input.placeholder = "填写现状";
     input.addEventListener("input", () => save(row, key, input.value));
     td.append(input);
     const previousCheck = edits.get(row.id)?.check?.trim();
@@ -165,9 +172,9 @@
 
   function exportValues(row) {
     const manual = valueFor(row, "facts").trim();
-    const reportFacts = row.facts.length
-      ? row.facts.join("\n") + "\n依据 " + row.evidence
-      : isUnreliable(row) ? row.status : "";
+    let reportFacts = row.facts.join("\n");
+    if (row.facts.length > 1) reportFacts += "\n依据 " + row.evidence;
+    if (!reportFacts && isUnreliable(row)) reportFacts = row.status;
     const current = [reportFacts, manual && (reportFacts ? "人工补充 · " + manual : manual)].filter(Boolean).join("\n");
     const previousCheck = edits.get(row.id)?.check?.trim();
     const progress = isHeld(row) ? row.status : [

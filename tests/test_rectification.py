@@ -1,4 +1,5 @@
 import base64
+import re
 from io import BytesIO
 from unittest.mock import patch
 
@@ -89,6 +90,28 @@ def test_rectification_reuses_platform_snapshots_with_their_actual_meaning():
     assert rows["M4"]["facts"] == []
 
 
+def test_template_goals_and_concise_statuses_are_kept_separate():
+    payload = result()
+    payload["visual_diagnosis"]["items"].extend([
+        {"standard_item_id": 18, "data_status": "zero", "fields": [
+            {"label": "开通状态", "value": "CLOSED"}, {"label": "生效状态", "value": "未生效"},
+        ]},
+        {"standard_item_id": 21, "data_status": "zero", "fields": [
+            {"label": "酒店官方视频", "value": "1/1"}, {"label": "酒店官方预览视频", "value": "0/1"},
+            {"label": "房型视频", "value": "9/9"},
+        ]},
+    ])
+    payload["ctrip_items"]["20"] = {"data_status": "success", "fields": [
+        {"label": "详情页视频", "value": "1/1"}, {"label": "列表页视频", "value": "0/1"},
+    ]}
+    rows = {row["id"]: row for row in build_plan(payload)["rows"]}
+    assert all(row["goal"] for row in rows.values())
+    assert rows["M5"]["facts"] == ["未开通"] and rows["M5"]["goal"] == "大床房和双床房"
+    assert rows["M10"]["facts"] == ["无首页预览视频"]
+    assert rows["C20"]["facts"] == ["无列表页视频"]
+    assert rows["M4"]["facts"] == []
+
+
 def test_plan_is_a_separate_page_with_a_report_link(tmp_path):
     payload = {**process(normalize_dataset({})), "hotel_id": "zhiting", "run_id": "test"}
     paths = write_reports(payload, tmp_path)
@@ -98,7 +121,7 @@ def test_plan_is_a_separate_page_with_a_report_link(tmp_path):
     assert "href='rectification.html'" in report and "rectification-data" not in report
     assert 'href="report.html"' in plan and "id='rectification-data'" in plan
     book = load_workbook(BytesIO(base64.b64decode(_template(build_plan(payload)))))
-    assert all(f"<th scope='col'>{cell.value}</th>".replace("'", '"') in plan for cell in book.active[3])
+    assert re.findall(r'<th scope="col"[^>]*>([^<]+)</th>', plan) == [cell.value for cell in book.active[3]]
     assert "下载 Excel" in plan
 
 

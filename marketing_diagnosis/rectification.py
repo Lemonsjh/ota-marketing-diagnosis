@@ -20,13 +20,13 @@ PLAN_FILENAME = "rectification.html"
 CHANNELS = {"C": ("ctrip", "携程"), "M": ("meituan", "美团")}
 # Only link individual facts that support this action, never use a score as evidence.
 EVIDENCE = {
-    "C4": (16, "参与状态|近30天订单|成交金额"),
+    "C4": (16, "参与状态"),
     "C10": (10, "酒店展示名称|门店后缀|热门商圈词命中"),
     "C12": (8, "信息完整度|完整度结果"),
     "C14": (10, "推荐词|短标签|列表页推荐词 / 标签 / 卖点"),
     "C16": (13, "当前生效权益数|已报名权益|已报名权益数量|生效权益数|有效权益数"),
     "C18": (11, "在售房型数|已检测房型数|含后缀房型数|售卖房型数"),
-    "C20": (20, "详情页视频|列表页视频|房型视频"),
+    "C20": (20, "列表页视频"),
     "C24": (12, "评分"),
     "C25": (12, "点评条数"),
     "C29": (6, "PSI 服务质量总分|基础分|奖励分|总扣分"),
@@ -35,7 +35,7 @@ EVIDENCE = {
     "M5": (18, "配置状态|开通状态|生效状态"),
     "M7": (19, "配置状态|开通状态|生效状态"),
     "M9": (10, "酒店展示名称|检测到的后缀|热门商圈词命中"),
-    "M10": (21, "酒店官方视频|酒店官方预览视频|房型视频"),
+    "M10": (21, "酒店官方预览视频"),
     "M12": (20, "开通状态|生效状态"),
     "M17": (14, "已报名权益数量"),
     "M19": (11, "在售房型数|已检测房型数|含后缀房型数"),
@@ -48,6 +48,8 @@ EVIDENCE = {
 UNAVAILABLE = {"", "-", "—", "—/—", "暂无数据", "待接入", "待更新", "待计算", "待确认", "未取到", "数据缺失", "未配置数据"}
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 STATUS_LABELS = {"OPEN": "已开通", "CLOSED": "未开通", "RUNNING": "投放中", "PENDING": "状态待核实"}
+SINGLE_STATUS = {"C4", "M5", "M7", "M12"}
+VIDEO_SLOTS = {"C20": ("列表页视频", "列表页视频"), "M10": ("酒店官方预览视频", "首页预览视频")}
 ROOM_REFERENCE = {"C13", "M14", "M19"}
 CANCEL_TEXT = re.compile(r"(?:入住当天|入住前)?\d{1,2}:\d{2}前免费取消|入住前(?:可|免费)取消|不可取消")
 
@@ -107,6 +109,17 @@ def _evidence(item, item_code, labels, result):
         return "数据过期", []
     if status in {"missing", "manual_pending", "error", "query_error"} or not facts:
         return "待补资料", []
+    if item_code in SINGLE_STATUS:
+        labels = ("参与状态", "开通状态", "配置状态")
+        confirmed = {"已开通", "未开通", "已参与", "未参与", "已配置", "未配置"}
+        state = next((facts[key] for key in labels if facts.get(key) in confirmed), None)
+        return ("已带入部分现状", [state]) if state else ("待补资料", [])
+    if item_code in VIDEO_SLOTS:
+        field, slot = VIDEO_SLOTS[item_code]
+        count = re.fullmatch(r"(\d+)(?:\s*/\s*(?:\d+|—))?", facts.get(field, ""))
+        if not count:
+            return "待补资料", []
+        return "已带入部分现状", [("有" if int(count[1]) else "无") + slot]
     when = "、".join(sorted(dates)) or "报告周期 " + _period(result) + "（原指标日期未标注）"
     return "已带入部分现状", [f"{label} {value}" for label, value in facts.items()] + [when]
 
@@ -168,10 +181,6 @@ def _report_reference(code, platform, sources, result):
             fields["商品名称标注（以具体退改条款为准）"] = "、".join(rules)
         day = ((metrics.get("price_ladder") or {}).get("data_period") or {}).get("end")
         anchor, title = "topic-4", "商品价格与预订条件"
-    elif code == "C6":
-        listing = sources["C"].get(10, {}).get("listing_content") or {}
-        fields = {f"页面{key}": listing.get(key) for key in ("推荐词", "短标签")}
-        anchor, title = "rule-10", "页面展示和入口基础"
     elif code == "M15":
         audience = sources["M"].get(5, {})
         for item in _values(audience.get("fields")):

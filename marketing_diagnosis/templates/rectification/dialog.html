@@ -9,23 +9,62 @@
 <header class="plan-header">
   <div class="plan-wrap plan-head-layout">
     <div>
-      <p class="plan-hotel">{{HOTEL}}</p>
-      <h1>整改计划</h1>
-      <p class="plan-period">诊断周期 <time>{{PERIOD}}</time></p>
+      <div class="plan-badge-row">
+        <span class="plan-hotel">{{HOTEL}}</span>
+        <span class="plan-period-badge">诊断周期 {{PERIOD}}</span>
+      </div>
+      <h1>OTA 运营整改落地计划</h1>
+      <p class="plan-sub">基于 S14 诊断事实推导 · 支持在线协作调整与多端导出</p>
     </div>
     <div class="plan-actions">
       <a class="plan-back" href="{{REPORT}}">返回诊断报告</a>
+      <button type="button" class="plan-secondary" id="rectification-copy">复制待办清单</button>
       <button type="button" class="plan-primary" id="rectification-download">下载 Excel</button>
     </div>
   </div>
 </header>
 <main class="plan-wrap">
+  <section class="plan-dashboard" aria-label="整改概览">
+    <div class="plan-progress-card">
+      <div class="plan-progress-header">
+        <span class="plan-progress-label">整改推进完成率</span>
+        <span class="plan-progress-val" id="rectification-progress-val">0%</span>
+      </div>
+      <div class="plan-progress-track">
+        <div class="plan-progress-fill" id="rectification-progress-bar" style="width: 0%"></div>
+      </div>
+      <p class="plan-progress-tip" id="rectification-progress-tip">已完成 0 项，共 0 项待整改</p>
+    </div>
+    <div class="plan-stats-grid">
+      <div class="plan-stat-card is-active" data-filter="all" tabindex="0" role="button" aria-label="查看全部项目">
+        <span class="plan-stat-num" id="rectification-stat-total">0</span>
+        <span class="plan-stat-label">全部项目</span>
+      </div>
+      <div class="plan-stat-card is-facts" data-filter="facts" tabindex="0" role="button" aria-label="查看已带入现状项目">
+        <span class="plan-stat-num" id="rectification-stat-facts">0</span>
+        <span class="plan-stat-label">已带入现状</span>
+      </div>
+      <div class="plan-stat-card is-pending" data-filter="pending" tabindex="0" role="button" aria-label="查看未填写现状项目">
+        <span class="plan-stat-num" id="rectification-stat-pending">0</span>
+        <span class="plan-stat-label">待补现状</span>
+      </div>
+      <div class="plan-stat-card is-done" data-filter="done" tabindex="0" role="button" aria-label="查看已完成项目">
+        <span class="plan-stat-num" id="rectification-stat-done">0</span>
+        <span class="plan-stat-label">已落实完成</span>
+      </div>
+    </div>
+  </section>
+
   <div class="plan-controls">
     <div id="rectification-channel" class="plan-channels" role="group" aria-label="整改计划平台"></div>
     <div class="plan-filters">
-      <label>筛选<input id="rectification-search" type="search" placeholder="搜索项目或内容"></label>
-      <label>现状<select id="rectification-filter">
-        <option value="all">全部</option><option value="pending">未填写</option><option value="edited">已编辑</option>
+      <label>筛选<input id="rectification-search" type="search" placeholder="搜索项目、现状或建议"></label>
+      <label>状态<select id="rectification-filter">
+        <option value="all">全部项目</option>
+        <option value="pending">未填写现状</option>
+        <option value="edited">已编辑过</option>
+        <option value="done">已落实完成</option>
+        <option value="todo">待跟进完成</option>
       </select></label>
     </div>
   </div>
@@ -46,5 +85,6 @@
   <p id="rectification-empty" class="plan-empty" hidden>当前筛选下没有项目。</p>
   <noscript><p class="plan-empty">启用 JavaScript 后可查看计划、补填和下载 Excel。</p></noscript>
 </main>
+<div id="plan-toast" class="plan-toast" role="alert" aria-live="assertive" hidden></div>
 </body>
 </html>

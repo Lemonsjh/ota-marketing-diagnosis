@@ -6,6 +6,7 @@
   const filter = pick("filter");
   const search = pick("search");
   const status = pick("status");
+  const toast = document.getElementById("plan-toast");
   const namespace = "s14:rectification:v1:" + JSON.stringify(data.key) + ":";
   const edits = new Map();
   const fields = [
@@ -31,11 +32,15 @@
   }
 
   const hasEdits = row => Object.values(edits.get(row.id) || {}).some(value => value.trim());
-  const hasCurrent = row => row.facts.length || edits.get(row.id)?.facts?.trim();
+  const hasCurrent = row => Boolean(row.facts.length || edits.get(row.id)?.facts?.trim());
   const isHeld = row => ["待业务确认", "暂不实施"].includes(row.status);
   const canFillCurrent = row => !isHeld(row) || row.allow_manual_current;
   const canEditProgress = row => row.status !== "暂不实施";
   const isUnreliable = row => ["数据过期", "口径冲突"].includes(row.status);
+  const isDone = row => {
+    const prog = valueFor(row, "progress").trim();
+    return /已完成|已上线|已开通|已落实|已配置|已生效|已达标/.test(prog);
+  };
 
   function element(tag, value, cls) {
     const el = document.createElement(tag);
@@ -44,9 +49,20 @@
     return el;
   }
 
+  let toastTimer = null;
+  function showToast(message) {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.hidden = true; }, 2600);
+  }
+
   const channelButtons = channels.map(name => {
-    const button = element("button", name);
+    const count = data.rows.filter(r => r.channel === name).length;
+    const button = element("button", `${name} (${count})`);
     button.type = "button";
+    button.dataset.name = name;
     button.addEventListener("click", () => {
       channel = name;
       render();
@@ -64,10 +80,11 @@
     } catch {
       status.textContent = "本机保存失败，请先下载 Excel 再关闭页面。";
     }
+    updateDashboard();
   }
 
   function valueFor(row, key) {
-    const defaults = {goal: row.goal, action: row.review};
+    const defaults = { goal: row.goal, action: row.review };
     return edits.get(row.id)?.[key] ?? defaults[key] ?? "";
   }
 
@@ -128,38 +145,84 @@
     const name = row.title + " · " + label;
     const button = element("button", "", "plan-cell-value");
     button.type = "button";
+
     function refresh() {
       const text = valueFor(row, key).trim();
       button.textContent = text || (key === "facts" ? "填写现状" : "—");
       button.classList.toggle("is-empty", !text);
       button.setAttribute("aria-label", "编辑 " + name + "：" + (text || "未填写"));
+      const tr = button.closest("tr");
+      if (tr && key === "progress") {
+        tr.classList.toggle("is-done-row", isDone(row));
+      }
     }
     refresh();
+
     button.addEventListener("click", () => {
-      const short = ["owner", "start", "due"].includes(key);
-      const input = document.createElement(short ? "input" : "textarea");
-      if (short) input.type = "text";
-      else input.rows = 2;
+      const isDate = ["start", "due"].includes(key);
+      const isShort = isDate || key === "owner";
+      const isProgress = key === "progress";
+
+      const container = element("div", "", "plan-editor-box");
+      const input = document.createElement(isProgress ? "textarea" : "input");
+      if (isDate) {
+        input.type = "date";
+      } else if (!isProgress) {
+        input.type = "text";
+      } else {
+        input.rows = 2;
+      }
       input.className = "plan-cell-editor";
-      input.maxLength = short ? 60 : 400;
+      input.maxLength = isShort ? 60 : 400;
       input.setAttribute("aria-label", name);
       input.value = valueFor(row, key);
+
+      let closing = false;
+      function closeEditor() {
+        if (closing) return;
+        closing = true;
+        refresh();
+        container.replaceWith(button);
+        updateDashboard();
+      }
+
       input.addEventListener("input", () => save(row, key, input.value));
       input.addEventListener("blur", () => {
-        refresh();
-        input.replaceWith(button);
-      }, {once: true});
+        setTimeout(closeEditor, 160);
+      });
+
       input.addEventListener("keydown", event => {
         if (event.isComposing) return;
-        if (event.key === "Escape" || (event.key === "Enter" && (short || event.ctrlKey || event.metaKey))) {
+        if (event.key === "Escape" || (event.key === "Enter" && (isShort || event.ctrlKey || event.metaKey))) {
           event.preventDefault();
-          input.blur();
+          closeEditor();
           button.focus();
         }
       });
-      button.replaceWith(input);
+
+      container.append(input);
+
+      if (isProgress) {
+        const chips = element("div", "", "plan-quick-chips");
+        ["已完成", "已上线", "进行中", "待跟进", "未开始"].forEach(label => {
+          const chipBtn = element("button", label, "plan-chip-btn");
+          chipBtn.type = "button";
+          chipBtn.addEventListener("mousedown", e => {
+            e.preventDefault();
+            input.value = label;
+            save(row, key, label);
+            closeEditor();
+            button.focus();
+          });
+          chips.append(chipBtn);
+        });
+        container.append(chips);
+      }
+
+      button.replaceWith(container);
       input.focus();
     });
+
     return button;
   }
 
@@ -168,30 +231,101 @@
     tr.dataset.id = row.id;
     tr.setAttribute("role", "row");
     tr.classList.toggle("plan-stage-start", startsStage);
+    tr.classList.toggle("is-done-row", isDone(row));
+
     const stage = cell("td", "工作阶段");
     stage.append(element("span", row.stage.replace(/\s+/g, "\n"),
       startsStage ? "plan-stage-name" : "plan-stage-name is-repeat"));
     stage.className = "plan-stage";
+
     const project = cell("th", "核心项目", row.title);
     project.scope = "row";
     project.className = "plan-item";
+
     tr.append(stage, project, ...fields.map(([key, name]) => inputCell(row, key, name)));
     return tr;
   }
 
+  function updateDashboard() {
+    const channelRows = data.rows.filter(row => row.channel === channel);
+    const total = channelRows.length;
+    const withFacts = channelRows.filter(row => hasCurrent(row)).length;
+    const done = channelRows.filter(row => isDone(row)).length;
+    const pending = total - done;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+
+    const progVal = pick("progress-val");
+    const progBar = pick("progress-bar");
+    const progTip = pick("progress-tip");
+    if (progVal) progVal.textContent = pct + "%";
+    if (progBar) progBar.style.width = pct + "%";
+    if (progTip) progTip.textContent = `已落实 ${done} 项，共 ${total} 项整改任务`;
+
+    const statTotal = pick("stat-total");
+    const statFacts = pick("stat-facts");
+    const statPending = pick("stat-pending");
+    const statDone = pick("stat-done");
+    if (statTotal) statTotal.textContent = String(total);
+    if (statFacts) statFacts.textContent = String(withFacts);
+    if (statPending) statPending.textContent = String(pending);
+    if (statDone) statDone.textContent = String(done);
+
+    document.querySelectorAll(".plan-stat-card").forEach(card => {
+      card.classList.toggle("is-active", card.dataset.filter === filter.value);
+    });
+  }
+
+  document.querySelectorAll(".plan-stat-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const targetFilter = card.dataset.filter;
+      if (filter.value === targetFilter) {
+        filter.value = "all";
+      } else {
+        filter.value = targetFilter;
+      }
+      render();
+    });
+    card.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        card.click();
+      }
+    });
+  });
+
   function render() {
     const query = search.value.trim().toLowerCase();
     const channelRows = data.rows.filter(row => row.channel === channel);
-    const list = channelRows.filter(row => (
-      (filter.value === "all" || (filter.value === "edited" ? hasEdits(row) : canFillCurrent(row) && !hasCurrent(row)))
-      && (!query || [row.title, ...row.facts, ...Object.values(edits.get(row.id) || {})]
-        .join(" ").toLowerCase().includes(query))
-    ));
-    channelButtons.forEach(button => button.setAttribute("aria-pressed", String(button.textContent === channel)));
+
+    const list = channelRows.filter(row => {
+      let matchesFilter = true;
+      if (filter.value === "edited") {
+        matchesFilter = hasEdits(row);
+      } else if (filter.value === "pending") {
+        matchesFilter = canFillCurrent(row) && !hasCurrent(row);
+      } else if (filter.value === "done") {
+        matchesFilter = isDone(row);
+      } else if (filter.value === "todo") {
+        matchesFilter = !isDone(row);
+      } else if (filter.value === "facts") {
+        matchesFilter = hasCurrent(row);
+      }
+
+      const matchesQuery = !query || [row.title, ...row.facts, ...Object.values(edits.get(row.id) || {})]
+        .join(" ").toLowerCase().includes(query);
+
+      return matchesFilter && matchesQuery;
+    });
+
+    channelButtons.forEach(button => {
+      button.setAttribute("aria-pressed", String(button.dataset.name === channel));
+    });
+
     rows.replaceChildren(...list.map((row, index) => rowElement(row, index === 0 || row.stage !== list[index - 1].stage)));
     pick("empty").hidden = Boolean(list.length);
-    pick("count").textContent = "显示 " + list.length + " / " + channelRows.length + " 项 · "
-      + channelRows.filter(row => row.facts.length).length + " 项已带入现状";
+    pick("count").textContent = `显示 ${list.length} / ${channelRows.length} 项 · ${channelRows.filter(row => row.facts.length).length} 项已带入现状`;
+
+    updateDashboard();
   }
 
   function setCell(xml, row, column, value) {
@@ -253,7 +387,7 @@
       const zip = fflate.unzipSync(original);
       channels.forEach((name, index) => refreshSheet(zip, "xl/worksheets/sheet" + (index + 1) + ".xml", name));
       const contents = fflate.zipSync(zip);
-      const url = URL.createObjectURL(new Blob([contents], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+      const url = URL.createObjectURL(new Blob([contents], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
       const link = element("a");
       link.href = url;
       link.download = data.hotel.replace(/[\\/:*?"<>|]/g, "_") + "_整改计划草案_" + data.key[1].replace(/[^0-9a-zA-Z_-]/g, "_") + ".xlsx";
@@ -262,10 +396,55 @@
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       status.textContent = "Excel 已生成，包含当前网页已填写的内容。";
+      showToast("Excel 已成功导出！");
     } catch {
       status.textContent = "暂时无法生成 Excel，已补填内容仍保留，请重试。";
     }
   });
+
+  const copyBtn = document.getElementById("rectification-copy");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      const channelRows = data.rows.filter(row => row.channel === channel);
+      const todoList = channelRows.filter(r => !isDone(r));
+      const doneCount = channelRows.length - todoList.length;
+
+      let text = `🏨 【${data.hotel}】OTA 运营整改落地待办清单\n`;
+      text += `📌 渠道：${channel} | 周期：${data.period}\n`;
+      text += `📊 当前进度：${doneCount}/${channelRows.length} (${Math.round((doneCount / channelRows.length) * 100)}%)\n`;
+      text += `----------------------------------------\n`;
+
+      let curStage = "";
+      todoList.forEach((r, idx) => {
+        if (r.stage && r.stage !== curStage) {
+          curStage = r.stage;
+          text += `\n【${curStage.replace(/\s+/g, " ")}】\n`;
+        }
+        const prog = valueFor(r, "progress").trim() || "未开始";
+        const owner = valueFor(r, "owner").trim() || "待认领";
+        const due = valueFor(r, "due").trim() || "未定";
+        text += `${idx + 1}. [${r.title}] 状态: ${prog} | 负责人: ${owner} | 截止: ${due}\n`;
+        text += `   - 目标: ${valueFor(r, "goal").trim()}\n`;
+        text += `   - 建议: ${valueFor(r, "action").trim()}\n`;
+      });
+
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast("已复制整改待办清单到剪贴板，可粘贴至工作群！");
+        }).catch(() => {
+          showToast("复制失败，请手动选取复制");
+        });
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.append(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+        showToast("已复制整改待办清单到剪贴板！");
+      }
+    });
+  }
 
   filter.addEventListener("change", render);
   search.addEventListener("input", render);

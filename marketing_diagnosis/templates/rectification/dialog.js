@@ -109,14 +109,7 @@
       if (key === "goal") td.textContent = valueFor(row, key);
       return td;
     }
-    const input = document.createElement("textarea");
-    input.rows = key === "action" ? 3 : 2;
-    input.maxLength = ["owner", "start", "due"].includes(key) ? 60 : 400;
-    input.setAttribute("aria-label", row.title + " · " + label);
-    input.value = valueFor(row, key);
-    if (key === "facts") input.placeholder = "填写现状";
-    input.addEventListener("input", () => save(row, key, input.value));
-    td.append(input);
+    td.append(editableValue(row, key, label));
     const previousCheck = edits.get(row.id)?.check?.trim();
     if (key === "progress" && previousCheck) {
       td.append(element("p", "验收 · " + previousCheck, "plan-quiet plan-check"));
@@ -124,11 +117,53 @@
     return td;
   }
 
-  function rowElement(row) {
+  function editableValue(row, key, label) {
+    const name = row.title + " · " + label;
+    const button = element("button", "", "plan-cell-value");
+    button.type = "button";
+    function refresh() {
+      const text = valueFor(row, key).trim();
+      button.textContent = text || (key === "facts" ? "填写现状" : "—");
+      button.classList.toggle("is-empty", !text);
+      button.setAttribute("aria-label", "编辑 " + name + "：" + (text || "未填写"));
+    }
+    refresh();
+    button.addEventListener("click", () => {
+      const short = ["owner", "start", "due"].includes(key);
+      const input = document.createElement(short ? "input" : "textarea");
+      if (short) input.type = "text";
+      else input.rows = 2;
+      input.className = "plan-cell-editor";
+      input.maxLength = short ? 60 : 400;
+      input.setAttribute("aria-label", name);
+      input.value = valueFor(row, key);
+      input.addEventListener("input", () => save(row, key, input.value));
+      input.addEventListener("blur", () => {
+        refresh();
+        input.replaceWith(button);
+      }, {once: true});
+      input.addEventListener("keydown", event => {
+        if (event.isComposing) return;
+        if (event.key === "Escape" || (event.key === "Enter" && (short || event.ctrlKey || event.metaKey))) {
+          event.preventDefault();
+          input.blur();
+          button.focus();
+        }
+      });
+      button.replaceWith(input);
+      input.focus();
+    });
+    return button;
+  }
+
+  function rowElement(row, startsStage) {
     const tr = element("tr");
     tr.dataset.id = row.id;
     tr.setAttribute("role", "row");
-    const stage = cell("td", "工作阶段", row.stage);
+    tr.classList.toggle("plan-stage-start", startsStage);
+    const stage = cell("td", "工作阶段");
+    stage.append(element("span", row.stage.replace(/\s+/g, "\n"),
+      startsStage ? "plan-stage-name" : "plan-stage-name is-repeat"));
     stage.className = "plan-stage";
     const project = cell("th", "核心项目", row.title);
     project.scope = "row";
@@ -146,7 +181,7 @@
         .join(" ").toLowerCase().includes(query))
     ));
     channelButtons.forEach(button => button.setAttribute("aria-pressed", String(button.textContent === channel)));
-    rows.replaceChildren(...list.map(rowElement));
+    rows.replaceChildren(...list.map((row, index) => rowElement(row, index === 0 || row.stage !== list[index - 1].stage)));
     pick("empty").hidden = Boolean(list.length);
     pick("count").textContent = "显示 " + list.length + " / " + channelRows.length + " 项 · "
       + channelRows.filter(row => row.facts.length).length + " 项已带入现状";

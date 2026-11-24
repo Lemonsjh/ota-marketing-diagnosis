@@ -48,7 +48,8 @@ def test_only_supported_facts_are_prefilled_and_statuses_are_distinct():
     assert rows["M9"]["status"] == "口径冲突" and not rows["M9"]["facts"]
     assert rows["M4"]["status"] == "待补资料"
     assert rows["C9"]["status"] == rows["C28"]["status"] == "待业务确认"
-    assert rows["C23"]["status"] == "暂不实施"
+    assert rows["C23"]["status"] == "待补资料" and rows["C23"]["facts"] == []
+    assert rows["C23"]["goal"] == "完成10条问答"
 
 
 def test_single_platform_workbook_keeps_layout_without_other_hotel_values():

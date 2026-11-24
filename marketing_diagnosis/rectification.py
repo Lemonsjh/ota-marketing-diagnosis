@@ -227,8 +227,6 @@ def build_plan(result):
         anchor_prefix = "ctrip-" if prefix == "C" and "meituan" in enabled else ""
         if code in {"C9", "C28"}:
             row["status"] = "待业务确认"
-        elif code == "C23":
-            row["status"] = "暂不实施"
         elif code in EVIDENCE:
             number, labels = EVIDENCE[code]
             item = sources[prefix].get(number, {})

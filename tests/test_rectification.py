@@ -147,8 +147,14 @@ def test_promotion_balances_add_unscored_facts_to_the_correct_plan_rows():
     assert rows["M22"]["facts"][:2] == ["推广通账户余额 ¥0.00（采集时间 2026-11-24 09:00:00）", "近30天推广投入 500"]
     assert rows["C32"]["facts"] == ["金字塔账户余额 ¥101.25（采集时间 2026-11-24 10:00:00）"]
     assert rows["C32"]["status"] == "已带入部分现状"
+    assert "balance_missing" not in rows["M22"] and "balance_missing" not in rows["C32"]
     payload["promotion_balances"]["ctrip"]["total_balance"] = None
-    assert next(row for row in build_plan(payload)["rows"] if row["id"] == "C32")["facts"] == []
+    del payload["promotion_balances"]["meituan"]
+    rows = {row["id"]: row for row in build_plan(payload)["rows"]}
+    assert rows["M22"]["balance_missing"] == "推广通账户余额 无"
+    assert rows["M22"]["facts"][0] == "近30天推广投入 500"
+    assert rows["C32"]["balance_missing"] == "金字塔账户余额 无"
+    assert rows["C32"]["status"] == "待补资料" and rows["C32"]["facts"] == []
 
 
 def test_meituan_rectification_lists_only_registration_activities():

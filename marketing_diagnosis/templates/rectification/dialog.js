@@ -73,6 +73,7 @@
 
   function evidence(row) {
     const facts = element("div", "", "plan-cell-content");
+    if (row.balance_missing) facts.append(element("p", row.balance_missing, "plan-fact"));
     row.facts.forEach((fact, index) => {
       const last = row.facts.length > 1 && index === row.facts.length - 1;
       if (last && fact.startsWith("报告周期 ")) return;
@@ -100,7 +101,9 @@
 
   function inputCell(row, key, label) {
     const td = cell("td", label);
-    if (key === "facts" && (row.facts.length || isUnreliable(row))) td.append(evidence(row));
+    if (key === "facts" && (row.facts.length || row.balance_missing || isUnreliable(row))) {
+      td.append(evidence(row));
+    }
     if (key === "facts" && row.facts.length) {
       const manual = valueFor(row, key).trim();
       if (manual) td.append(element("p", "已补充 · " + manual, "plan-quiet plan-check"));
@@ -211,7 +214,8 @@
 
   function exportValues(row) {
     const manual = valueFor(row, "facts").trim();
-    const reportFacts = [...row.facts, ...(isUnreliable(row) ? [row.status] : [])].join("\n");
+    const reportFacts = [row.balance_missing, ...row.facts, isUnreliable(row) ? row.status : ""]
+      .filter(Boolean).join("\n");
     const current = [reportFacts, manual && (reportFacts ? "人工补充 · " + manual : manual)].filter(Boolean).join("\n");
     const previousCheck = edits.get(row.id)?.check?.trim();
     const progress = canEditProgress(row) ? [

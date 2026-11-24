@@ -19,6 +19,7 @@ from marketing_diagnosis.channel_score_totals import _item_id, _keyed_values, _v
 ASSETS = Path(__file__).parent / "templates" / "rectification"
 PLAN_FILENAME = "rectification.html"
 CHANNELS = {"C": ("ctrip", "携程"), "M": ("meituan", "美团")}
+BALANCE_LABELS = {"M22": "推广通账户余额", "C32": "金字塔账户余额"}
 # Only link individual facts that support this action, never use a score as evidence.
 EVIDENCE = {
     "C4": (16, "参与状态"),
@@ -203,14 +204,7 @@ def _report_reference(code, platform, sources, result):
     return evidence, anchor, title
 
 
-def _promotion_balance_fact(code, result):
-    if code == "M22":
-        channel, label = "meituan", "推广通账户余额"
-    elif code == "C32":
-        channel, label = "ctrip", "金字塔账户余额"
-    else:
-        return None
-    balance = (result.get("promotion_balances") or {}).get(channel) or {}
+def _promotion_balance_fact(balance, label):
     captured = balance.get("snapshot_time")
     if not _date(captured):
         return None
@@ -237,6 +231,7 @@ def build_plan(result):
         "C": {_item_id(item): item for item in _keyed_values(result.get("ctrip_items"))},
         "M": {_item_id(item): item for item in _values((result.get("visual_diagnosis") or {}).get("items"))},
     }
+    balances = result.get("promotion_balances") or {}
     rows, stages = [], {}
     sheet_rows = dict.fromkeys(CHANNELS, 3)
     for record in json.loads((ASSETS / "items.json").read_text(encoding="utf-8")):
@@ -264,10 +259,14 @@ def build_plan(result):
             facts, anchor, title = _report_reference(code, channel, sources, result)
             if facts:
                 row.update(status="已带入部分现状", facts=facts, evidence=title, anchor=anchor_prefix + anchor)
-        if balance := _promotion_balance_fact(code, result):
-            row["facts"].insert(0, balance)
-            if row["status"] == "待补资料":
-                row["status"] = "已带入部分现状"
+        if code in BALANCE_LABELS:
+            label = BALANCE_LABELS[code]
+            if balance := _promotion_balance_fact(balances.get(channel) or {}, label):
+                row["facts"].insert(0, balance)
+                if row["status"] == "待补资料":
+                    row["status"] = "已带入部分现状"
+            else:
+                row["balance_missing"] = f"{label} 无"
         rows.append(row)
     return {
         "hotel": str(result.get("hotel_name") or result["hotel_id"]),

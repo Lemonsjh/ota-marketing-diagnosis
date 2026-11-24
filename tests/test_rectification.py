@@ -73,6 +73,11 @@ def test_meituan_daily_maintenance_matches_the_excel_template():
     for row in rows.values():
         assert book[row["channel"]].cell(row["excel_row"], 2).value == row["title"]
     assert "A4:A18 A19:A24" in str(book["美团"].merged_cells)
+    for sheet, metadata_cell in ((book["携程"], "A36"), (book["美团"], "A28")):
+        assert {"F1:I1", "F2:I2"} <= {str(cell_range) for cell_range in sheet.merged_cells.ranges}
+        assert sheet["F1"].value == "启动日：________　运营负责人：________"
+        assert sheet["F2"].value == "酒店负责人：________　日期双方确认"
+        assert sheet[metadata_cell].value == f"诊断周期 {plan['period']}　报告版本 {plan['key'][1]}"
 
 
 def test_single_platform_workbook_keeps_layout_without_other_hotel_values():

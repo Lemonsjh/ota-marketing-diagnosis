@@ -285,9 +285,10 @@ def _template(plan):
             continue
         sheet["A2"] = f"{plan['hotel']}  ·  {sheet.title}"
         sheet["A2"].data_type = "s"
-        sheet["F1"] = f"诊断周期 {plan['period']}"
-        sheet["F2"] = f"报告版本 {plan['key'][1]}"
+        sheet["F1"] = "启动日：________　运营负责人：________"
+        sheet["F2"] = "酒店负责人：________　日期双方确认"
         footer = 34 if sheet.title == "携程" else 26
+        sheet.cell(footer + 2, 1, f"诊断周期 {plan['period']}　报告版本 {plan['key'][1]}")
         sheet.cell(footer, 1, "本表为整改草案。确认目标、措施、分工和验收条件后再执行。")
         sheet.cell(footer + 1, 1, "诊断现状与人工补充分别标注。空缺或口径冲突的项目请按状态补齐。")
     output = BytesIO()

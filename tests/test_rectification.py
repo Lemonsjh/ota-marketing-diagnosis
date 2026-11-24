@@ -144,8 +144,8 @@ def test_promotion_balances_add_unscored_facts_to_the_correct_plan_rows():
          patch("marketing_diagnosis.latest._process", return_value=payload):
         payload = process(data)
     rows = {row["id"]: row for row in build_plan(payload)["rows"]}
-    assert rows["M22"]["facts"][:2] == ["推广通账户余额 ¥0.00（采集时间 2026-11-24 09:00:00）", "近30天推广投入 500"]
-    assert rows["C32"]["facts"] == ["金字塔账户余额 ¥101.25（采集时间 2026-11-24 10:00:00）"]
+    assert rows["M22"]["facts"][:2] == ["推广通账户余额 ¥0.00", "近30天推广投入 500"]
+    assert rows["C32"]["facts"] == ["金字塔账户余额 ¥101.25"]
     assert rows["C32"]["status"] == "已带入部分现状"
     assert "balance_missing" not in rows["M22"] and "balance_missing" not in rows["C32"]
     payload["promotion_balances"]["ctrip"]["total_balance"] = None

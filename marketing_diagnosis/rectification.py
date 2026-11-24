@@ -216,7 +216,7 @@ def _promotion_balance_fact(balance, label):
         return None
     currency = balance.get("currency") or "CNY"
     money = f"¥{amount:,.2f}" if currency == "CNY" else f"{amount:,.2f} {currency}"
-    return f"{label} {money}（采集时间 {captured}）"
+    return f"{label} {money}"
 
 
 def build_plan(result):

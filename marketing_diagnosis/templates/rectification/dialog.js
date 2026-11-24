@@ -207,9 +207,7 @@
 
   function exportValues(row) {
     const manual = valueFor(row, "facts").trim();
-    let reportFacts = row.facts.join("\n");
-    if (row.facts.length > 1) reportFacts += "\n依据 " + row.evidence;
-    if (!reportFacts && isUnreliable(row)) reportFacts = row.status;
+    const reportFacts = row.facts.join("\n") || (isUnreliable(row) ? row.status : "");
     const current = [reportFacts, manual && (reportFacts ? "人工补充 · " + manual : manual)].filter(Boolean).join("\n");
     const previousCheck = edits.get(row.id)?.check?.trim();
     const progress = isHeld(row) ? row.status : [

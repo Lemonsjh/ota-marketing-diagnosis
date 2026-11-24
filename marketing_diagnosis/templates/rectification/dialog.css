@@ -34,17 +34,18 @@ a { color:var(--action); text-underline-offset:3px; }
 .plan-meta { flex-wrap:wrap; gap:3px 12px; padding:8px 0; color:var(--muted); font-size:.85rem; }
 .plan-meta p { margin:0; }
 .plan-grid {
-  overflow:auto; max-height:max(220px,calc(100dvh - 225px)); border:1px solid #d2ddd4;
-  border-radius:8px; margin-bottom:18px;
+  border:1px solid #d2ddd4; border-radius:8px; margin-bottom:18px;
 }
 .plan-table {
-  width:100%; min-width:1080px; table-layout:fixed; border-collapse:separate; border-spacing:0;
+  width:100%; table-layout:fixed; border-collapse:separate; border-spacing:0;
   background:var(--sheet); font-size:.875rem;
 }
 .plan-table thead th {
   position:sticky; top:0; z-index:1; background:var(--accent); text-align:left;
-  font-size:.82rem; border-bottom:1px solid #ccd8cc; white-space:nowrap;
+  font-size:.82rem; border-bottom:1px solid #ccd8cc;
 }
+.plan-table thead th:first-child { border-start-start-radius:7px; }
+.plan-table thead th:last-child { border-start-end-radius:7px; }
 .plan-table thead th:nth-child(1) { width:7%; }
 .plan-table thead th:nth-child(2) { width:10%; }
 .plan-table thead th:nth-child(3) { width:23%; }
@@ -70,7 +71,7 @@ a { color:var(--action); text-underline-offset:3px; }
 .plan-check { margin:6px 0 0; white-space:pre-wrap; }
 .plan-cell-value,.plan-cell-editor {
   display:block; width:100%; text-align:left; border-radius:4px; line-height:1.5;
-  font-size:inherit; white-space:pre-wrap; overflow-wrap:anywhere;
+  font-size:inherit; white-space:pre-wrap; overflow-wrap:anywhere; scroll-margin-top:3.25rem;
 }
 .plan-cell-value { min-height:1.5em; padding:0; border:0; background:transparent; cursor:text; }
 .plan-cell-value:hover,.plan-cell-value:focus-visible { background:#e5eee4; }
@@ -79,9 +80,9 @@ td[data-label="现状"] .plan-cell-value.is-empty { color:var(--action); text-de
 .plan-cell-editor { min-height:32px; padding:4px 5px; border:1px solid #83a090; background:#fff; }
 textarea.plan-cell-editor { resize:vertical; field-sizing:content; }
 .plan-empty { margin:16px 0 48px; color:var(--muted); }
-@media (max-width:830px) {
-  .plan-grid { border:0; overflow:visible; max-height:none; }
-  .plan-table { display:block; min-width:0; background:transparent; }
+@media (max-width:1020px) {
+  .plan-grid { border:0; }
+  .plan-table { display:block; background:transparent; }
   .plan-table thead { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; }
   .plan-table tbody { display:block; }
   .plan-table tr {

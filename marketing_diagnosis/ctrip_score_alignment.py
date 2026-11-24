@@ -78,7 +78,7 @@ def _yoyo_campaign_orders(sections: dict[str, Any]) -> float | None:
 def _scan_item(sections: dict[str, Any]) -> dict[str, Any]:
     source = "携程 eBooking / YOYO卡或扫码住"
     if not _has_yoyo_activity(sections):
-        return _item(
+        item = _item(
             7,
             0.0,
             "success",
@@ -86,6 +86,12 @@ def _scan_item(sections: dict[str, Any]) -> dict[str, Any]:
             [_field("参与状态", "未参与"), _field("近30天扫码订单", 0), _field("日均扫码订单", 0)],
             "未参与YOYO卡&扫码住专享促销或专享红包，本项按未参与计0分。",
         )
+        item["activity_snapshot_time"] = max(
+            (_text(row.get("snapshot_time")) for row in sections.get("ctrip_promotion_activity") or []
+             if isinstance(row, dict) and row.get("activity_name")),
+            default="",
+        )
+        return item
     orders = _yoyo_campaign_orders(sections)
     if orders is None:
         return _item(

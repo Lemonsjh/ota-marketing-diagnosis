@@ -119,6 +119,11 @@ def _patch_business_travel(items: dict[str, Any], sections: dict[str, Any]) -> N
         "metric_value": performance.get("campaign_gmv"),
     })
     item["source"] = "ctrip_ota_promotion_activity / ctrip_ota_promotion_activity_performance / ctrip_ota_promotion_status"
+    item["activity_snapshot_time"] = max(
+        (str(row.get("snapshot_time") or "") for row in sections.get("ctrip_promotion_activity") or []
+         if isinstance(row, dict) and row.get("activity_name")),
+        default="",
+    )
     item["fields"] = [
         {"label": "参与状态", "value": "已参与" if joined else "未参与", "note": ""},
         {"label": "近30天订单", "value": performance.get("campaign_quantity") if joined else 0, "note": ""},

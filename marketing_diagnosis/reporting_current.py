@@ -21,6 +21,7 @@ from marketing_diagnosis.ctrip_page_entry_compact import patch_page_entry_html
 from marketing_diagnosis.meituan_market_report import patch_market_html
 from marketing_diagnosis.meituan_recent_reviews import patch_recent_reviews_html
 from marketing_diagnosis.report_groups import organize_report_html
+from marketing_diagnosis.rectification import patch_rectification
 from marketing_diagnosis.report_opening import patch_opening_html, opening_markdown
 from marketing_diagnosis.manual_supplement import patch_manual_supplements
 from marketing_diagnosis.visual_diagnosis import patch_video_upload_copy
@@ -143,7 +144,7 @@ def build_markdown(result: dict[str, Any]) -> str:
 def write_reports(result: dict[str, Any], output_dir: str | Path) -> dict[str, str]:
     paths = _write_reports(result, output_dir)
     report_path = Path(paths["report_html"])
-    report_path.write_text(build_html(result), encoding="utf-8")
+    report_path.write_text(patch_rectification(build_html(result), result), encoding="utf-8")
     if paths.get("report_markdown"):
         Path(paths["report_markdown"]).write_text(build_markdown(result), encoding="utf-8")
     return paths

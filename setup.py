@@ -6,7 +6,7 @@ setup(
     description="Independent third-party OTA marketing diagnosis tool",
     packages=find_packages(),
     include_package_data=True,
-    package_data={"marketing_diagnosis": ["templates/*.html"]},
+    package_data={"marketing_diagnosis": ["templates/*.html", "templates/rectification/*"]},
     python_requires=">=3.11",
     install_requires=[
         "openpyxl>=3.1.0",

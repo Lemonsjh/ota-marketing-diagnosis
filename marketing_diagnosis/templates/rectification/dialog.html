@@ -1,0 +1,18 @@
+<dialog id="rectification-dialog" aria-labelledby="rectification-title">
+  <header class="rect-head">
+    <div><p>{{HOTEL}}</p><h2 id="rectification-title">整改计划草案</h2></div>
+    <form method="dialog"><button type="submit" aria-label="关闭整改计划">关闭</button></form>
+  </header>
+  <div class="rect-toolbar">
+    <label>平台<select id="rectification-channel"></select></label>
+    <label>项目<select id="rectification-filter">
+      <option value="all">全部项目</option><option value="pending">未补齐</option><option value="edited">已补填</option>
+    </select></label>
+    <span id="rectification-count"></span>
+  </div>
+  <div class="rect-content" id="rectification-rows"></div>
+  <footer class="rect-foot">
+    <p id="rectification-status" role="status">补填内容仅保存在当前浏览器。</p>
+    <button type="button" id="rectification-download">下载整改计划 Excel</button>
+  </footer>
+</dialog>

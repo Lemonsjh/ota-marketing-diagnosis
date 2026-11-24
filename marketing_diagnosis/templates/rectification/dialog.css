@@ -1,0 +1,37 @@
+#rectification-open { margin-inline-end: .5rem; }
+#rectification-dialog {
+  --rect-ink:#16382e; --rect-accent:#145744; --rect-line:#dbe4de; --rect-paper:#f5f8f5;
+  width:min(930px,calc(100vw - 28px)); max-height:min(90dvh,850px); margin:auto;
+  color:var(--rect-ink); background:white; border:1px solid var(--rect-line); border-radius:16px;
+  padding:0; box-shadow:0 24px 80px #17382c35; overflow:hidden;
+}
+#rectification-dialog[open] { display:grid; grid-template-rows:auto auto minmax(0,1fr) auto; }
+#rectification-dialog::backdrop { background:#0a211a80; }
+#rectification-dialog :is(.rect-head,.rect-toolbar,.rect-foot) { display:flex; align-items:center; gap:1rem; padding:14px 22px; }
+#rectification-dialog :is(.rect-head,.rect-foot) { justify-content:space-between; }
+#rectification-dialog .rect-head { border-bottom:1px solid var(--rect-line); }
+#rectification-dialog .rect-head p { margin:0; color:#46675d; font-size:.84rem; }
+#rectification-dialog h2 { margin:2px 0 0; font-size:1.5rem; }
+#rectification-dialog .rect-toolbar { background:var(--rect-paper); flex-wrap:wrap; }
+#rectification-dialog .rect-toolbar label { display:flex; align-items:center; gap:.5rem; }
+#rectification-dialog :is(button,select,input,textarea) {
+  font:inherit; color:inherit; background:white; border:1px solid #b6c8bf;
+  border-radius:7px; padding:7px 10px; min-width:0;
+}
+#rectification-dialog button,#rectification-dialog summary { cursor:pointer; }
+#rectification-dialog :focus-visible { outline:2px solid #24735b; outline-offset:2px; }
+#rectification-dialog .rect-content { overflow:auto; padding:8px 22px 18px; }
+#rectification-dialog details { border-bottom:1px solid var(--rect-line); }
+#rectification-dialog summary { padding:12px 0; }
+#rectification-dialog summary strong { margin-inline:6px 10px; }
+#rectification-dialog .rect-badge { color:#46675d; font-size:.83rem; }
+#rectification-dialog .rect-facts { padding:10px 12px; background:var(--rect-paper); border-radius:7px; margin-bottom:10px; }
+#rectification-dialog .rect-facts p { margin:4px 0; overflow-wrap:anywhere; }
+#rectification-dialog .rect-facts a { color:var(--rect-accent); text-decoration:underline; }
+#rectification-dialog .rect-fields { display:grid; gap:10px 14px; grid-template-columns:repeat(auto-fit,minmax(195px,1fr)); margin:0 0 14px; }
+#rectification-dialog .rect-fields label { display:grid; gap:4px; font-size:.9rem; }
+#rectification-dialog textarea { resize:vertical; min-height:56px; }
+#rectification-dialog .rect-foot { border-top:1px solid var(--rect-line); flex-wrap:wrap; }
+#rectification-dialog .rect-foot p { margin:0; font-size:.85rem; color:#46675d; }
+#rectification-dialog #rectification-download { background:var(--rect-accent); border-color:var(--rect-accent); color:white; }
+@media print { #rectification-open,#rectification-dialog { display:none !important; } }

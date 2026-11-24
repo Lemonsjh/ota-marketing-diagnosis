@@ -168,6 +168,7 @@
   {
     "id": "C28",
     "title": "动销单维护",
+    "allow_manual_current": true,
     "stage": "",
     "goal": "根据酒店当日出租率情况进行调整"
   },

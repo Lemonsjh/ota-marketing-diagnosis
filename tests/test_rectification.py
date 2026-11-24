@@ -62,7 +62,8 @@ def test_meituan_daily_maintenance_matches_the_excel_template():
     assert rows["M25"]["goal"] == rows["C28"]["goal"] == "根据酒店当日出租率情况进行调整"
     assert rows["M25"]["status"] == rows["C28"]["status"] == "待业务确认"
     assert rows["M25"]["allow_manual_current"] is True
-    assert not rows["C28"].get("allow_manual_current")
+    assert rows["C28"]["allow_manual_current"] is True
+    assert not rows["C9"].get("allow_manual_current")
     assert rows["M16"]["excel_row"] == 15 and rows["M25"]["excel_row"] == 19
     book = load_workbook(BytesIO(base64.b64decode(_template(plan))))
     for row in rows.values():

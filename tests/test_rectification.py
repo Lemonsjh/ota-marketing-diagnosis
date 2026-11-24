@@ -55,6 +55,7 @@ def test_only_supported_facts_are_prefilled_and_statuses_are_distinct():
     assert rows["C9"]["allow_manual_current"] is True
     assert rows["C23"]["status"] == "待补资料" and rows["C23"]["facts"] == []
     assert rows["C23"]["goal"] == "完成10条问答"
+    assert rows["C23"]["review"] == "每天5条"
 
 
 def test_meituan_daily_maintenance_matches_the_excel_template():

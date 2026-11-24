@@ -63,6 +63,32 @@ def test_single_platform_workbook_keeps_layout_without_other_hotel_values():
                for row in sheet for cell in row)
 
 
+def test_rectification_reuses_platform_snapshots_with_their_actual_meaning():
+    payload = result()
+    payload["metrics"] = {
+        "price_ladder": {"data_period": {"end": "2026-11-24"}, "by_platform": {
+            "ctrip": {"min_price": 0, "max_price": 265, "product_count": 5},
+            "meituan": {"min_price": 50, "max_price": 260},
+        }},
+        "promotion": {"by_platform": {"ctrip": {"activity_count": 6}, "meituan": {"activity_count": 11}}},
+        "room_types": {"items": [
+            {"platform": "meituan", "room_type_name": "双床房", "product_count": 1,
+             "product_names": ["双床房-入住当天18:00前免费取消"]},
+            {"platform": "ctrip", "room_type_name": "携程大床", "product_count": 1},
+        ]},
+    }
+    payload["ctrip_items"]["6"] = {"metrics": [
+        {"metric_code": "cancellation_rate", "metric_value": 100, "connected": True},
+    ]}
+    rows = {row["id"]: row for row in build_plan(payload)["rows"]}
+    assert "最低商品挂牌价（元） 0" in rows["C8"]["facts"]
+    assert "活动快照记录数 11" in rows["M16"]["facts"]
+    assert "PSI 可取消率（不含具体截止时间） 100%" in rows["C11"]["facts"]
+    assert "商品名称标注（以具体退改条款为准） 入住当天18:00前免费取消" in rows["M13"]["facts"]
+    assert "商品快照房型 双床房" in rows["M14"]["facts"]
+    assert rows["M4"]["facts"] == []
+
+
 def test_plan_is_a_separate_page_with_a_report_link(tmp_path):
     payload = {**process(normalize_dataset({})), "hotel_id": "zhiting", "run_id": "test"}
     paths = write_reports(payload, tmp_path)
@@ -71,7 +97,9 @@ def test_plan_is_a_separate_page_with_a_report_link(tmp_path):
     assert paths["rectification_html"] == str(tmp_path / "rectification.html")
     assert "href='rectification.html'" in report and "rectification-data" not in report
     assert 'href="report.html"' in plan and "id='rectification-data'" in plan
-    assert "现状与依据" in plan and "下载 Excel" in plan
+    book = load_workbook(BytesIO(base64.b64decode(_template(build_plan(payload)))))
+    assert all(f"<th scope='col'>{cell.value}</th>".replace("'", '"') in plan for cell in book.active[3])
+    assert "下载 Excel" in plan
 
 
 def test_plan_failure_does_not_break_report(tmp_path):

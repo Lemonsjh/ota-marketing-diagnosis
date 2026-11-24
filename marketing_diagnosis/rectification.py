@@ -24,7 +24,7 @@ EVIDENCE = {
     "C10": (10, "酒店展示名称|门店后缀|热门商圈词命中"),
     "C12": (8, "信息完整度|完整度结果"),
     "C14": (10, "推荐词|短标签|列表页推荐词 / 标签 / 卖点"),
-    "C16": (13, "当前生效权益数|已报名权益数量|生效权益数|有效权益数"),
+    "C16": (13, "当前生效权益数|已报名权益|已报名权益数量|生效权益数|有效权益数"),
     "C18": (11, "在售房型数|已检测房型数|含后缀房型数|售卖房型数"),
     "C20": (20, "详情页视频|列表页视频|房型视频"),
     "C24": (12, "评分"),
@@ -47,6 +47,9 @@ EVIDENCE = {
 }
 UNAVAILABLE = {"", "-", "—", "—/—", "暂无数据", "待接入", "待更新", "待计算", "待确认", "未取到", "数据缺失", "未配置数据"}
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+STATUS_LABELS = {"OPEN": "已开通", "CLOSED": "未开通", "RUNNING": "投放中", "PENDING": "状态待核实"}
+ROOM_REFERENCE = {"C13", "M14", "M19"}
+CANCEL_TEXT = re.compile(r"(?:入住当天|入住前)?\d{1,2}:\d{2}前免费取消|入住前(?:可|免费)取消|不可取消")
 
 
 def _date(value):
@@ -59,8 +62,10 @@ def _date(value):
 def _field_text(value):
     if value is None or isinstance(value, (dict, list, tuple, bool)):
         return ""
+    if isinstance(value, float):
+        value = f"{value:.2f}".rstrip("0").rstrip(".")
     value = str(value).strip()
-    return value if value not in UNAVAILABLE and len(value) <= 250 else ""
+    return STATUS_LABELS.get(value, value) if value not in UNAVAILABLE and len(value) <= 250 else ""
 
 
 def _evidence(item, item_code, labels, result):
@@ -110,6 +115,84 @@ def _period(result):
     return f"{result.get('period_start') or '未标注'} 至 {result.get('period_end') or '未标注'}"
 
 
+def _snapshot_reference(metrics, section, platform, labels):
+    snapshot = metrics.get(section) or {}
+    values = (snapshot.get("by_platform") or {}).get(platform) or {}
+    if snapshot.get("status") in {"missing", "error", "stale"} or not values:
+        return {}, None
+    return ({label: values.get(field) for field, label in labels.items()},
+            (snapshot.get("data_period") or {}).get("end"))
+
+
+def _report_reference(code, platform, sources, result):
+    """Use report snapshots for related facts, with the actual measurement named."""
+    metrics = result.get("metrics") or {}
+    rooms = [item for item in _values((metrics.get("room_types") or {}).get("items"))
+             if item.get("platform") == platform and item.get("product_count")
+             and item.get("room_type_name")]
+    fields, day, anchor, title = {}, None, "", ""
+    if code in {"C8", "C30"}:
+        fields, day = _snapshot_reference(metrics, "price_ladder", platform, {
+            "min_price": "最低商品挂牌价（元）", "max_price": "最高商品挂牌价（元）", "product_count": "商品数",
+        })
+        anchor, title = "topic-4", "商品价格快照"
+    elif code in {"C15", "M16"}:
+        fields, day = _snapshot_reference(metrics, "promotion", platform, {
+            "activity_count": "活动快照记录数", "activity_product_count": "活动商品记录数",
+        })
+        fields = {key: value for key, value in fields.items() if value}
+        anchor, title = "topic-6", "活动与权益"
+    elif code in ROOM_REFERENCE:
+        names = list(dict.fromkeys(str(item["room_type_name"]) for item in rooms))
+        if names:
+            fields = {"商品快照房型数": len(names), "商品快照房型": "、".join(names[:6])}
+            if len(names) > 6:
+                fields["商品快照房型"] += f"等 {len(names)} 类"
+        day = ((metrics.get("price_ladder") or {}).get("data_period") or {}).get("end")
+        anchor, title = "rule-11", "房型名称与售卖房型"
+    elif code == "C11":
+        for item in _values(sources["C"].get(6, {}).get("metrics")):
+            if item.get("metric_code") == "cancellation_rate" and item.get("connected"):
+                value = _field_text(item.get("metric_value"))
+                if value:
+                    fields["PSI 可取消率（不含具体截止时间）"] = f"{value}%"
+                    day = item.get("period_end_date") or item.get("business_date")
+                break
+        anchor, title = "rule-6", "PSI 服务质量分"
+    elif code == "M13":
+        rules = list(dict.fromkeys(
+            match for item in rooms for name in item.get("product_names") or []
+            for match in CANCEL_TEXT.findall(str(name))
+        ))
+        if rules:
+            fields["商品名称标注（以具体退改条款为准）"] = "、".join(rules)
+        day = ((metrics.get("price_ladder") or {}).get("data_period") or {}).get("end")
+        anchor, title = "topic-4", "商品价格与预订条件"
+    elif code == "C6":
+        listing = sources["C"].get(10, {}).get("listing_content") or {}
+        fields = {f"页面{key}": listing.get(key) for key in ("推荐词", "短标签")}
+        anchor, title = "rule-10", "页面展示和入口基础"
+    elif code == "M15":
+        audience = sources["M"].get(5, {})
+        for item in _values(audience.get("fields")):
+            label, value = item.get("label"), item.get("value")
+            if label == "统计月份":
+                fields[label] = value
+            if label in {"本地占比", "异地占比"} and isinstance(value, (int, float)) and 0 <= value <= 1:
+                fields[f"客群参考·{label}"] = f"{value:.1%}"
+        if len(fields) <= 1 and "统计月份" in fields:
+            fields = {}
+        anchor, title = "rule-5", "用户来源数据"
+    evidence = [f"{label} {_field_text(value)}" for label, value in fields.items() if _field_text(value)]
+    if evidence:
+        if _date(day) and _date(result.get("period_end")) and not (
+            _date(result.get("period_end")) - timedelta(days=30) <= _date(day) <= _date(result.get("period_end"))
+        ):
+            return [], "", ""
+        evidence.append(f"数据日期 {_date(day).isoformat()}" if _date(day) else "报告周期 " + _period(result))
+    return evidence, anchor, title
+
+
 def build_plan(result):
     enabled = result.get("enabled_channels")
     if enabled is None:
@@ -122,14 +205,17 @@ def build_plan(result):
         "C": {_item_id(item): item for item in _keyed_values(result.get("ctrip_items"))},
         "M": {_item_id(item): item for item in _values((result.get("visual_diagnosis") or {}).get("items"))},
     }
-    rows = []
+    rows, stages = [], {}
     for record in json.loads((ASSETS / "items.json").read_text(encoding="utf-8")):
         code = record["id"]
         prefix = code[0]
         channel, name = CHANNELS[prefix]
         if channel not in enabled:
             continue
-        row = {**record, "channel": name, "status": "待补资料", "facts": []}
+        if record["stage"]:
+            stages[prefix] = record["stage"]
+        row = {**record, "stage": stages.get(prefix, ""), "channel": name, "status": "待补资料", "facts": []}
+        anchor_prefix = "ctrip-" if prefix == "C" and "meituan" in enabled else ""
         if code in {"C9", "C28"}:
             row["status"] = "待业务确认"
         elif code == "C23":
@@ -140,7 +226,11 @@ def build_plan(result):
             row["status"], row["facts"] = _evidence(item, code, labels, result)
             if row["facts"]:
                 row["evidence"] = str(item.get("item_name") or record["title"])
-                row["anchor"] = ("ctrip-" if prefix == "C" and "meituan" in enabled else "") + f"rule-{number}"
+                row["anchor"] = anchor_prefix + f"rule-{number}"
+        if row["status"] == "待补资料":
+            facts, anchor, title = _report_reference(code, channel, sources, result)
+            if facts:
+                row.update(status="已带入部分现状", facts=facts, evidence=title, anchor=anchor_prefix + anchor)
         rows.append(row)
     return {
         "hotel": str(result.get("hotel_name") or result["hotel_id"]),

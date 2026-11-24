@@ -24,8 +24,8 @@
     <div id="rectification-channel" class="plan-channels" role="group" aria-label="整改计划平台"></div>
     <div class="plan-filters">
       <label>筛选<input id="rectification-search" type="search" placeholder="搜索项目或内容"></label>
-      <label>状态<select id="rectification-filter">
-        <option value="all">全部</option><option value="pending">待补充</option><option value="edited">已补填</option>
+      <label>现状<select id="rectification-filter">
+        <option value="all">全部</option><option value="pending">未填写</option><option value="edited">已编辑</option>
       </select></label>
     </div>
   </div>
@@ -33,19 +33,18 @@
     <p id="rectification-count" aria-live="polite"></p>
     <p id="rectification-status" role="status">补填内容仅保存在当前浏览器。</p>
   </div>
-  <table class="plan-table" aria-label="整改计划明细">
-    <thead><tr><th scope="col">整改项目</th><th scope="col">现状与依据</th><th scope="col">整改计划</th><th scope="col">状态与操作</th></tr></thead>
-    <tbody id="rectification-rows"></tbody>
-  </table>
+  <div class="plan-grid">
+    <table class="plan-table" role="table" aria-label="整改计划明细">
+      <thead role="rowgroup"><tr role="row">
+        <th scope="col">工作阶段</th><th scope="col">核心项目</th><th scope="col">现状</th>
+        <th scope="col">标准 / 本月目标</th><th scope="col">建议</th><th scope="col">完成情况</th>
+        <th scope="col">启动时间</th><th scope="col">完成时间</th><th scope="col">负责人</th>
+      </tr></thead>
+      <tbody role="rowgroup" id="rectification-rows"></tbody>
+    </table>
+  </div>
   <p id="rectification-empty" class="plan-empty" hidden>当前筛选下没有项目。</p>
   <noscript><p class="plan-empty">启用 JavaScript 后可查看计划、补填和下载 Excel。</p></noscript>
 </main>
-<dialog id="rectification-dialog" aria-labelledby="rectification-title">
-  <header class="plan-dialog-head">
-    <h2 id="rectification-title">补填整改计划</h2>
-    <form method="dialog"><button type="submit" class="plan-back">完成</button></form>
-  </header>
-  <div id="rectification-editor" class="plan-editor"></div>
-</dialog>
 </body>
 </html>

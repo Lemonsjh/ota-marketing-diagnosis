@@ -2,7 +2,6 @@
   "use strict";
   const pick = id => document.getElementById("rectification-" + id);
   const data = JSON.parse(pick("data").textContent);
-  const dialog = pick("dialog");
   const rows = pick("rows");
   const filter = pick("filter");
   const search = pick("search");
@@ -10,20 +9,19 @@
   const namespace = "s14:rectification:v1:" + JSON.stringify(data.key) + ":";
   const edits = new Map();
   const fields = [
-    ["facts", "人工补充现状"], ["goal", "目标"], ["action", "整改措施"],
-    ["owner", "负责人"], ["start", "启动时间"], ["due", "完成时间"], ["check", "验收方式"],
+    ["facts", "现状"], ["goal", "标准 / 本月目标"], ["action", "建议"],
+    ["progress", "完成情况"], ["start", "启动时间"], ["due", "完成时间"], ["owner", "负责人"],
   ];
   const channels = [...new Set(data.rows.map(row => row.channel))];
   const sheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
   const selected = new URLSearchParams(location.search).get("channel") === "ctrip" ? "携程" : "美团";
   let channel = channels.includes(selected) ? selected : channels[0];
-  let editingId = null;
 
   for (const row of data.rows) {
     try {
       const saved = JSON.parse(localStorage.getItem(namespace + row.id) || "{}");
       const values = {};
-      for (const [key] of fields) {
+      for (const [key] of [...fields, ["check"]]) {
         if (typeof saved?.[key] === "string") values[key] = saved[key].slice(0, 400);
       }
       if (Object.keys(values).length) edits.set(row.id, values);
@@ -32,16 +30,10 @@
     }
   }
 
-  const hasEdits = row => fields.some(([key]) => edits.get(row.id)?.[key]?.trim());
+  const hasEdits = row => Object.values(edits.get(row.id) || {}).some(value => value.trim());
+  const hasCurrent = row => row.facts.length || edits.get(row.id)?.facts?.trim();
   const isHeld = row => ["待业务确认", "暂不实施"].includes(row.status);
-  const isReady = row => !isHeld(row) && (row.facts.length || edits.get(row.id)?.facts?.trim())
-    && fields.slice(1).every(([key]) => edits.get(row.id)?.[key]?.trim());
-  function label(row) {
-    if (isHeld(row)) return row.status;
-    if (isReady(row)) return "待复核";
-    if (!row.facts.length && !edits.get(row.id)?.facts?.trim()) return row.status;
-    return "待酒店确认";
-  }
+  const isUnreliable = row => ["数据过期", "口径冲突"].includes(row.status);
 
   function element(tag, value, cls) {
     const el = document.createElement(tag);
@@ -72,98 +64,69 @@
     }
   }
 
-  function line(container, title, value) {
-    const paragraph = element("p");
-    paragraph.append(element("span", title, "plan-field"), document.createTextNode(value));
-    container.append(paragraph);
+  function valueFor(row, key) {
+    return edits.get(row.id)?.[key] ?? (key === "action" ? row.review || "" : "");
   }
 
-  function evidence(row, showManual) {
+  function evidence(row) {
     const facts = element("div", "", "plan-cell-content");
-    row.facts.forEach((fact, index) => facts.append(element(
-      "p", fact, index === row.facts.length - 1 ? "plan-fact-date plan-quiet" : "plan-fact"
-    )));
-    if (!row.facts.length) facts.append(element("p", row.status, "plan-quiet"));
+    row.facts.forEach((fact, index) => {
+      const last = index === row.facts.length - 1;
+      if (last && fact.startsWith("报告周期 ")) return;
+      facts.append(element("p", fact, last ? "plan-fact-date plan-quiet" : "plan-fact"));
+    });
+    if (isUnreliable(row)) facts.append(element("p", row.status, "plan-quiet"));
     if (row.anchor) {
       const href = new URL(data.report, window.location.href);
       if (channels.length > 1) href.searchParams.set("channel", row.channel === "携程" ? "ctrip" : "meituan");
       href.hash = row.anchor;
-      const link = element("a", "诊断依据 · " + row.evidence);
+      const link = element("a", "查看诊断依据");
+      link.title = row.evidence;
       link.href = href.href;
       facts.append(link);
     }
-    const additional = edits.get(row.id)?.facts?.trim();
-    if (showManual && additional) line(facts, "人工补充", additional);
     return facts;
   }
 
-  function editRow(row) {
-    editingId = row.id;
-    pick("title").textContent = "补填 · " + row.title;
-    const form = element("div");
-    for (const [key, name] of fields) {
-      const caption = element("label", name);
-      const control = document.createElement(["owner", "start", "due"].includes(key) ? "input" : "textarea");
-      control.maxLength = control.tagName === "INPUT" ? 60 : 400;
-      control.value = edits.get(row.id)?.[key] || "";
-      if (key === "start" || key === "due") control.placeholder = "日期或相对时间";
-      control.addEventListener("input", () => save(row, key, control.value));
-      caption.append(control);
-      form.append(caption);
-    }
-    pick("editor").replaceChildren(evidence(row, false), form);
-    dialog.showModal();
+  function cell(elementType, label, content = "") {
+    const td = element(elementType, content);
+    td.dataset.label = label;
+    td.setAttribute("role", elementType === "th" ? "rowheader" : "cell");
+    return td;
   }
 
-  function planDetails(row) {
-    const details = element("div", "", "plan-cell-content");
-    const draft = edits.get(row.id) || {};
-    const recorded = fields.slice(1).filter(([key]) => draft[key]?.trim());
-    if (recorded.length) {
-      recorded.forEach(([key, name]) => line(details, name, draft[key].trim()));
-    } else {
-      const next = {
-        "暂不实施": "当前不安排实施。",
-        "待业务确认": "先确认项目定义和适用范围。",
-        "数据过期": "先更新本项数据，再确认措施。",
-        "口径冲突": "先复核数据口径，再确认措施。",
-        "待补资料": "先补齐资料，再填写目标和措施。",
-      };
-      const review = (row.status === "待补资料" || row.facts.length) && row.review;
-      if (review) {
-        line(details, "建议下一步", review);
-      } else {
-        details.append(element("p", next[row.status] || "根据诊断依据复核现状后，填写目标和措施。", "plan-note"));
-      }
+  function inputCell(row, key, label) {
+    const td = cell("td", label);
+    if (key === "facts" && (row.facts.length || isUnreliable(row))) td.append(evidence(row));
+    if (isHeld(row)) {
+      if (key === "progress") td.append(element("span", row.status, "plan-quiet"));
+      return td;
     }
-    return details;
+    const input = document.createElement("textarea");
+    input.rows = key === "action" ? 3 : 2;
+    input.maxLength = ["owner", "start", "due"].includes(key) ? 60 : 400;
+    input.setAttribute("aria-label", row.title + " · " + label);
+    input.value = valueFor(row, key);
+    if (key === "facts") input.placeholder = row.facts.length ? "补充现状" : "填写现状";
+    input.addEventListener("input", () => save(row, key, input.value));
+    td.append(input);
+    const previousCheck = edits.get(row.id)?.check?.trim();
+    if (key === "progress" && previousCheck) {
+      td.append(element("p", "验收 · " + previousCheck, "plan-quiet plan-check"));
+    }
+    return td;
   }
 
   function rowElement(row) {
     const tr = element("tr");
-    const project = element("td");
-    project.append(element("strong", row.title, "plan-item"), element("span", row.stage, "plan-stage"));
-    const current = element("td");
-    current.dataset.label = "现状与依据";
-    current.append(evidence(row, true));
-    const plan = element("td");
-    plan.dataset.label = "整改计划";
-    plan.append(planDetails(row));
-    const actions = element("td");
-    const badge = element("span", label(row), "plan-state");
-    badge.dataset.tone = isReady(row) || row.status === "暂不实施" ? "neutral" : "pending";
-    actions.append(badge);
-    if (!isHeld(row)) {
-      const button = element("button", hasEdits(row) ? "编辑" : "补填", "plan-edit");
-      button.type = "button";
-      button.dataset.row = row.id;
-      button.setAttribute("aria-label", "编辑 " + row.title);
-      button.addEventListener("click", () => editRow(row));
-      const control = element("div");
-      control.append(button);
-      actions.append(control);
-    }
-    tr.append(project, current, plan, actions);
+    tr.dataset.id = row.id;
+    tr.setAttribute("role", "row");
+    const stage = cell("td", "工作阶段", row.stage);
+    stage.className = "plan-stage";
+    const project = cell("th", "核心项目", row.title);
+    project.scope = "row";
+    project.className = "plan-item";
+    tr.append(stage, project, ...fields.map(([key, name]) => inputCell(row, key, name)));
     return tr;
   }
 
@@ -171,7 +134,7 @@
     const query = search.value.trim().toLowerCase();
     const channelRows = data.rows.filter(row => row.channel === channel);
     const list = channelRows.filter(row => (
-      (filter.value === "all" || (filter.value === "edited" ? hasEdits(row) : !isHeld(row) && !isReady(row)))
+      (filter.value === "all" || (filter.value === "edited" ? hasEdits(row) : !isHeld(row) && !hasCurrent(row)))
       && (!query || [row.title, ...row.facts, ...Object.values(edits.get(row.id) || {})]
         .join(" ").toLowerCase().includes(query))
     ));
@@ -179,7 +142,7 @@
     rows.replaceChildren(...list.map(rowElement));
     pick("empty").hidden = Boolean(list.length);
     pick("count").textContent = "显示 " + list.length + " / " + channelRows.length + " 项 · "
-      + channelRows.filter(hasEdits).length + " 项已补填";
+      + channelRows.filter(row => row.facts.length).length + " 项已带入现状";
   }
 
   function setCell(xml, row, column, value) {
@@ -201,15 +164,17 @@
   }
 
   function exportValues(row) {
-    const edit = isHeld(row) ? {} : edits.get(row.id) || {};
-    const facts = row.facts.length
-      ? "诊断现状\n" + row.facts.join("\n") + "\n依据 " + row.evidence
-      : "诊断现状 · " + row.status;
-    return [
-      facts + (edit.facts?.trim() ? "\n人工补充 · " + edit.facts.trim() : ""),
-      edit.goal || "", edit.action || "", label(row) + (edit.check?.trim() ? "\n验收 · " + edit.check.trim() : ""),
-      edit.start || "", edit.due || "", edit.owner || "",
-    ];
+    const manual = valueFor(row, "facts").trim();
+    const reportFacts = row.facts.length
+      ? row.facts.join("\n") + "\n依据 " + row.evidence
+      : isUnreliable(row) ? row.status : "";
+    const current = [reportFacts, manual && (reportFacts ? "人工补充 · " + manual : manual)].filter(Boolean).join("\n");
+    const previousCheck = edits.get(row.id)?.check?.trim();
+    const progress = isHeld(row) ? row.status : [
+      valueFor(row, "progress"), previousCheck && "验收 · " + previousCheck,
+    ].filter(Boolean).join("\n");
+    return [current, valueFor(row, "goal"), valueFor(row, "action"), progress,
+      valueFor(row, "start"), valueFor(row, "due"), valueFor(row, "owner")];
   }
 
   function refreshSheet(zip, path, channelName) {
@@ -256,10 +221,5 @@
 
   filter.addEventListener("change", render);
   search.addEventListener("input", render);
-  dialog.addEventListener("close", () => {
-    render();
-    (rows.querySelector('[data-row="' + editingId + '"]') || search).focus();
-    editingId = null;
-  });
   render();
 })();

@@ -32,15 +32,22 @@
   }
 
   const hasEdits = row => Object.values(edits.get(row.id) || {}).some(value => value.trim());
-  const hasCurrent = row => Boolean(row.facts.length || edits.get(row.id)?.facts?.trim());
+  const hasImportedCurrent = row => row.facts.length > 0;
   const isHeld = row => ["待业务确认", "暂不实施"].includes(row.status);
   const canFillCurrent = row => !isHeld(row) || row.allow_manual_current;
   const canEditProgress = row => row.status !== "暂不实施";
   const isUnreliable = row => ["数据过期", "口径冲突"].includes(row.status);
-  const isDone = row => {
-    const prog = valueFor(row, "progress").trim();
-    return /已完成|已上线|已开通|已落实|已配置|已生效|已达标/.test(prog);
-  };
+  const completedStatuses = new Set(["已完成", "已上线", "已开通", "已落实", "已配置", "已生效", "已达标"]);
+  const isDone = row => completedStatuses.has(valueFor(row, "progress").trim());
+  const needsCurrent = row => canFillCurrent(row) && !hasImportedCurrent(row) && !valueFor(row, "facts").trim();
+  const filterPredicates = {all: () => true, facts: hasImportedCurrent, pending: needsCurrent,
+    edited: hasEdits, done: isDone, todo: row => !isDone(row)};
+
+  function matchesFilters(row, query) {
+    return filterPredicates[filter.value](row) &&
+      (!query || [row.title, ...row.facts, ...Object.values(edits.get(row.id) || {})]
+        .join(" ").toLowerCase().includes(query));
+  }
 
   function element(tag, value, cls) {
     const el = document.createElement(tag);
@@ -178,25 +185,26 @@
       input.value = valueFor(row, key);
 
       let closing = false;
-      function closeEditor() {
+      function closeEditor(restoreFocus = false) {
         if (closing) return;
         closing = true;
-        refresh();
         container.replaceWith(button);
-        updateDashboard();
+        refresh();
+        if (!matchesFilters(row, search.value.trim().toLowerCase())) render();
+        if (restoreFocus) (button.isConnected ? button : filter).focus();
       }
 
       input.addEventListener("input", () => save(row, key, input.value));
-      input.addEventListener("blur", () => {
-        setTimeout(closeEditor, 160);
+      container.addEventListener("focusout", event => {
+        if (!container.contains(event.relatedTarget)) closeEditor();
       });
-
-      input.addEventListener("keydown", event => {
+      container.addEventListener("keydown", event => {
         if (event.isComposing) return;
-        if (event.key === "Escape" || (event.key === "Enter" && (isShort || event.ctrlKey || event.metaKey))) {
+        const submit = event.target === input && event.key === "Enter" &&
+          (isShort || event.ctrlKey || event.metaKey);
+        if (event.key === "Escape" || submit) {
           event.preventDefault();
-          closeEditor();
-          button.focus();
+          closeEditor(true);
         }
       });
 
@@ -207,12 +215,9 @@
         ["已完成", "已上线", "进行中", "待跟进", "未开始"].forEach(label => {
           const chipBtn = element("button", label, "plan-chip-btn");
           chipBtn.type = "button";
-          chipBtn.addEventListener("mousedown", e => {
-            e.preventDefault();
-            input.value = label;
+          chipBtn.addEventListener("click", () => {
             save(row, key, label);
-            closeEditor();
-            button.focus();
+            closeEditor(true);
           });
           chips.append(chipBtn);
         });
@@ -249,9 +254,9 @@
   function updateDashboard() {
     const channelRows = data.rows.filter(row => row.channel === channel);
     const total = channelRows.length;
-    const withFacts = channelRows.filter(row => hasCurrent(row)).length;
+    const withFacts = channelRows.filter(hasImportedCurrent).length;
     const done = channelRows.filter(row => isDone(row)).length;
-    const pending = total - done;
+    const pending = channelRows.filter(needsCurrent).length;
     const pct = total ? Math.round((done / total) * 100) : 0;
 
     const progVal = pick("progress-val");
@@ -271,7 +276,9 @@
     if (statDone) statDone.textContent = String(done);
 
     document.querySelectorAll(".plan-stat-card").forEach(card => {
-      card.classList.toggle("is-active", card.dataset.filter === filter.value);
+      const active = card.dataset.filter === filter.value;
+      card.classList.toggle("is-active", active);
+      card.setAttribute("aria-pressed", String(active));
     });
   }
 
@@ -285,37 +292,13 @@
       }
       render();
     });
-    card.addEventListener("keydown", e => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        card.click();
-      }
-    });
   });
 
   function render() {
     const query = search.value.trim().toLowerCase();
     const channelRows = data.rows.filter(row => row.channel === channel);
 
-    const list = channelRows.filter(row => {
-      let matchesFilter = true;
-      if (filter.value === "edited") {
-        matchesFilter = hasEdits(row);
-      } else if (filter.value === "pending") {
-        matchesFilter = canFillCurrent(row) && !hasCurrent(row);
-      } else if (filter.value === "done") {
-        matchesFilter = isDone(row);
-      } else if (filter.value === "todo") {
-        matchesFilter = !isDone(row);
-      } else if (filter.value === "facts") {
-        matchesFilter = hasCurrent(row);
-      }
-
-      const matchesQuery = !query || [row.title, ...row.facts, ...Object.values(edits.get(row.id) || {})]
-        .join(" ").toLowerCase().includes(query);
-
-      return matchesFilter && matchesQuery;
-    });
+    const list = channelRows.filter(row => matchesFilters(row, query));
 
     channelButtons.forEach(button => {
       button.setAttribute("aria-pressed", String(button.dataset.name === channel));
@@ -323,7 +306,7 @@
 
     rows.replaceChildren(...list.map((row, index) => rowElement(row, index === 0 || row.stage !== list[index - 1].stage)));
     pick("empty").hidden = Boolean(list.length);
-    pick("count").textContent = `显示 ${list.length} / ${channelRows.length} 项 · ${channelRows.filter(row => row.facts.length).length} 项已带入现状`;
+    pick("count").textContent = `显示 ${list.length} / ${channelRows.length} 项 · ${channelRows.filter(hasImportedCurrent).length} 项已带入现状`;
 
     updateDashboard();
   }

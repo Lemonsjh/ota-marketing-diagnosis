@@ -14,7 +14,7 @@
         <span class="plan-period-badge">诊断周期 {{PERIOD}}</span>
       </div>
       <h1>OTA 运营整改落地计划</h1>
-      <p class="plan-sub">基于 S14 诊断事实推导 · 支持在线协作调整与多端导出</p>
+      <p class="plan-sub">填写内容保存在当前浏览器</p>
     </div>
     <div class="plan-actions">
       <a class="plan-back" href="{{REPORT}}">返回诊断报告</a>
@@ -36,22 +36,22 @@
       <p class="plan-progress-tip" id="rectification-progress-tip">已完成 0 项，共 0 项待整改</p>
     </div>
     <div class="plan-stats-grid">
-      <div class="plan-stat-card is-active" data-filter="all" tabindex="0" role="button" aria-label="查看全部项目">
+      <button type="button" class="plan-stat-card is-active" data-filter="all" aria-label="查看全部项目">
         <span class="plan-stat-num" id="rectification-stat-total">0</span>
         <span class="plan-stat-label">全部项目</span>
-      </div>
-      <div class="plan-stat-card is-facts" data-filter="facts" tabindex="0" role="button" aria-label="查看已带入现状项目">
+      </button>
+      <button type="button" class="plan-stat-card is-facts" data-filter="facts" aria-label="查看已带入现状项目">
         <span class="plan-stat-num" id="rectification-stat-facts">0</span>
         <span class="plan-stat-label">已带入现状</span>
-      </div>
-      <div class="plan-stat-card is-pending" data-filter="pending" tabindex="0" role="button" aria-label="查看未填写现状项目">
+      </button>
+      <button type="button" class="plan-stat-card is-pending" data-filter="pending" aria-label="查看未填写现状项目">
         <span class="plan-stat-num" id="rectification-stat-pending">0</span>
         <span class="plan-stat-label">待补现状</span>
-      </div>
-      <div class="plan-stat-card is-done" data-filter="done" tabindex="0" role="button" aria-label="查看已完成项目">
+      </button>
+      <button type="button" class="plan-stat-card is-done" data-filter="done" aria-label="查看已完成项目">
         <span class="plan-stat-num" id="rectification-stat-done">0</span>
         <span class="plan-stat-label">已落实完成</span>
-      </div>
+      </button>
     </div>
   </section>
 
@@ -61,6 +61,7 @@
       <label>筛选<input id="rectification-search" type="search" placeholder="搜索项目、现状或建议"></label>
       <label>状态<select id="rectification-filter">
         <option value="all">全部项目</option>
+        <option value="facts">已带入现状</option>
         <option value="pending">未填写现状</option>
         <option value="edited">已编辑过</option>
         <option value="done">已落实完成</option>
@@ -70,7 +71,7 @@
   </div>
   <div class="plan-meta">
     <p id="rectification-count" aria-live="polite"></p>
-    <p id="rectification-status" role="status">点击可编辑单元格，修改自动保存在当前浏览器。</p>
+    <p id="rectification-status" role="status">点击单元格即可编辑。</p>
   </div>
   <div class="plan-grid">
     <table class="plan-table" role="table" aria-label="整改计划明细">

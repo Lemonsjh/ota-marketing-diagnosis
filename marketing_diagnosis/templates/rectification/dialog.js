@@ -213,7 +213,7 @@
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      status.textContent = "Excel 已生成，表内保留未补齐项目的状态。";
+      status.textContent = "Excel 已生成，包含当前网页已填写的内容。";
     } catch {
       status.textContent = "暂时无法生成 Excel，已补填内容仍保留，请重试。";
     }

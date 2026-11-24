@@ -27,7 +27,7 @@ a { color:var(--action); text-underline-offset:3px; }
 .plan-channels button { min-width:75px; }
 .plan-channels button[aria-pressed="true"] { background:var(--action); border-color:var(--action); color:#fff; }
 .plan-filters label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.88rem; }
-.plan-filters :is(input,select)or :is(input,textarea) {
+.plan-filters :is(input,select) {
   min-width:0; min-height:40px; border:1px solid #adbbb2; border-radius:7px; padding:7px 9px; background:var(--sheet);
 }
 .plan-filters input { width:min(220px,47vw); }

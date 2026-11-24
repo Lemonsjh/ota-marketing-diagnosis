@@ -149,7 +149,18 @@ def _report_reference(code, platform, sources, result):
             "min_price": "最低商品挂牌价（元）", "max_price": "最高商品挂牌价（元）", "product_count": "商品数",
         })
         anchor, title = "topic-4", "商品价格快照"
-    elif code in {"C15", "M16"}:
+    elif code == "M16":
+        registered = (metrics.get("promotion") or {}).get("meituan_registered_activities") or {}
+        names = [_field_text(name) for name in registered.get("names") or []]
+        names = [name for name in names if name]
+        day = registered.get("snapshot_time")
+        report_end = _date(result.get("period_end"))
+        snapshot_day = _date(day)
+        if not names or (snapshot_day and report_end and not report_end - timedelta(days=30) <= snapshot_day <= report_end):
+            return [], "", ""
+        date_line = f"数据日期 {snapshot_day.isoformat()}" if snapshot_day else "报告周期 " + _period(result)
+        return [f"报名活动 {len(names)} 项", "、".join(names), date_line], "topic-6", "美团报名活动"
+    elif code == "C15":
         fields, day = _snapshot_reference(metrics, "promotion", platform, {
             "activity_count": "活动快照记录数", "activity_product_count": "活动商品记录数",
         })

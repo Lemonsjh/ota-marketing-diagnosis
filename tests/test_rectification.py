@@ -6,6 +6,7 @@ from unittest.mock import patch
 from openpyxl import load_workbook
 
 from marketing_diagnosis.latest import normalize_dataset, process
+from marketing_diagnosis.metrics_core import promotion_metrics
 from marketing_diagnosis.rectification import _template, build_plan, write_rectification
 from marketing_diagnosis.reporting_current import write_reports
 
@@ -84,11 +85,25 @@ def test_rectification_reuses_platform_snapshots_with_their_actual_meaning():
     ]}
     rows = {row["id"]: row for row in build_plan(payload)["rows"]}
     assert "最低商品挂牌价（元） 0" in rows["C8"]["facts"]
-    assert "活动快照记录数 11" in rows["M16"]["facts"]
+    assert rows["M16"]["facts"] == []
     assert "PSI 可取消率（不含具体截止时间） 100%" in rows["C11"]["facts"]
     assert "商品名称标注（以具体退改条款为准） 入住当天18:00前免费取消" in rows["M13"]["facts"]
     assert "商品快照房型 双床房" in rows["M14"]["facts"]
     assert rows["M4"]["facts"] == []
+
+
+def test_meituan_rectification_lists_only_registration_activities():
+    payload = result()
+    rows = [
+        {"platform": "meituan", "activity_source_type": "报名活动", "activity_name": "平台报名一",
+         "snapshot_time": "2026-11-24 09:02:02"},
+        {"platform": "meituan", "activity_source_type": "自助促销", "activity_name": "门店自设"},
+        {"platform": "ctrip", "activity_source_type": "报名活动", "activity_name": "携程活动"},
+    ]
+    payload["metrics"] = {"promotion": promotion_metrics(rows, [{"platform": "meituan"}])}
+    plan_rows = {row["id"]: row for row in build_plan(payload)["rows"]}
+    assert plan_rows["M16"]["facts"] == ["报名活动 1 项", "平台报名一", "数据日期 2026-11-24"]
+    assert "活动快照记录数 1" in plan_rows["C15"]["facts"]
 
 
 def test_template_goals_and_concise_statuses_are_kept_separate():

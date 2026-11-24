@@ -291,11 +291,14 @@ def promotion_metrics(rows: list[dict[str, Any]], product_rows: list[dict[str, A
     room_type_total = sum(_num(row.get("activity_room_type_count")) or 0 for row in rows)
     activity_products = len(product_rows)
     by_platform = defaultdict(lambda: {"activity_count": 0, "active_activity_count": 0, "activity_product_count": 0})
+    meituan_registered = []
     for row in rows:
         platform = str(row.get("platform") or "unknown")
         by_platform[platform]["activity_count"] += 1
         if row in active_rows:
             by_platform[platform]["active_activity_count"] += 1
+        if platform == "meituan" and str(row.get("activity_source_type") or "").strip() == "报名活动":
+            meituan_registered.append(row)
     for row in product_rows:
         platform = str(row.get("platform") or "unknown")
         by_platform[platform]["activity_product_count"] += 1
@@ -311,6 +314,11 @@ def promotion_metrics(rows: list[dict[str, Any]], product_rows: list[dict[str, A
         "has_cost_roi_fields": False,
         "missing_roi_fields": ["promo_cost", "promo_clicks", "promo_orders", "promo_revenue", "promo_roi"],
         "by_platform": dict(by_platform),
+        "meituan_registered_activities": {
+            "names": list(dict.fromkeys(str(row.get("activity_name") or "").strip()
+                                        for row in meituan_registered if str(row.get("activity_name") or "").strip())),
+            "snapshot_time": max((str(row.get("snapshot_time") or "") for row in meituan_registered), default=""),
+        },
     }
 
 

@@ -333,6 +333,7 @@ def _state_extra(
 ) -> dict[str, Any]:
     return {
         "manual_room_type_names": names or list((state or {}).get("manual_room_type_names") or []),
+        **({"source_card_ticket": state["source_card_ticket"]} if state and state.get("source_card_ticket") else {}),
         "manual_input_operator": sender_id or (state or {}).get("manual_input_operator"),
         "manual_input_recorded_at": (
             datetime.now().isoformat(timespec="seconds")
@@ -578,6 +579,8 @@ def _handle_source_choice(
 ) -> Any:
     choice = _normalize_choice(source)
     old_state = _get_flow_state(chat_id, sender_id) or {}
+    if old_state.get("source_card_ticket"):
+        return "请在群内点击本次诊断卡片或直接回复「数据库」或「上传Excel」。"
     names = _manual_names(text, old_state)
     extra = _state_extra(old_state, names, sender_id)
 
@@ -756,7 +759,7 @@ def main() -> int:
                 "awaiting_source",
                 chat_id=chat_id,
                 sender_id=sender_id,
-                extra=_state_extra(state, names, sender_id),
+                extra=_state_extra({k: v for k, v in state.items() if k != "source_card_ticket"}, names, sender_id),
             )
             return _print(
                 _source_selection_card(new_state.get("manual_room_type_names"))

@@ -18,13 +18,13 @@ from marketing_diagnosis.shared_knowledge import authorize_group
 
 BUTTON = re.compile(r"^s14-choice:([a-f0-9]{32}):(database|excel)$")
 EXPIRED = "这张卡片暂不可用，请由发起人使用最近一次诊断卡片，或重新发起诊断。"
-WAIT_EXCEL = "已选择上传 Excel，请在 10 分钟内把文件发到本群，无需再次 @ 机器人。"
+WAIT_EXCEL = "已选择上传 Excel，请在 10 分钟内将 .xlsx 或 .xlsm 文件发到本群。"
 WAIT_DB = "已选择数据库，正在生成诊断报告。"
 
 
 def selection_card(ticket, names):
     card = entry._source_selection_card(names)["card"]
-    card["elements"][-1]["text"]["content"] = "也可以直接回复「数据库」或「上传Excel」。"
+    card["elements"][-1]["text"]["content"] = "也可以在群里 @诊断机器人，回复「数据库」或「上传Excel」。"
     card["elements"].append({"tag": "action", "actions": [
         {"tag": "button", "type": style, "text": {"tag": "plain_text", "content": label},
          "value": {"command": f"s14-choice:{ticket}:{choice}"}}
@@ -74,7 +74,8 @@ def handle(account, chat, sender, text, message_id="", *, operation="event", tic
                            (*key, ticket, hotel, "awaiting_source", now, message_id, text, json.dumps(names), ""))
                 entry._set_flow_state("awaiting_source", chat_id=chat, sender_id=sender,
                                       extra={**entry._state_extra(old, names, sender), "source_card_ticket": ticket})
-                return {"card": selection_card(ticket, names), "ticket": ticket, "fallback": entry.SOURCE_SELECTION_TEXT}
+                return {"card": selection_card(ticket, names), "ticket": ticket,
+                        "fallback": "请选择数据来源。在群里 @诊断机器人，回复「数据库」或「上传Excel」。"}
             if not row and not button:
                 return {"pass": True}  # Existing text-only session.
             if (not row or row["hotel"] != hotel or (button and row["ticket"] != button[1])

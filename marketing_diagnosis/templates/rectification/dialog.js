@@ -95,12 +95,14 @@
     return edits.get(row.id)?.[key] ?? defaults[key] ?? "";
   }
 
+  const isReportPeriodNote = fact => fact.startsWith("报告周期 ");
+
   function evidence(row) {
     const facts = element("div", "", "plan-cell-content");
     if (row.balance_missing) facts.append(element("p", row.balance_missing, "plan-fact"));
     row.facts.forEach((fact, index) => {
       const last = row.facts.length > 1 && index === row.facts.length - 1;
-      if (last && fact.startsWith("报告周期 ")) return;
+      if (isReportPeriodNote(fact)) return;
       facts.append(element("p", fact, last ? "plan-fact-date plan-quiet" : "plan-fact"));
     });
     if (isUnreliable(row)) facts.append(element("p", row.status, "plan-quiet"));
@@ -331,7 +333,8 @@
 
   function exportValues(row) {
     const manual = valueFor(row, "facts").trim();
-    const reportFacts = [row.balance_missing, ...row.facts, isUnreliable(row) ? row.status : ""]
+    const facts = row.facts.filter(fact => !isReportPeriodNote(fact));
+    const reportFacts = [row.balance_missing, ...facts, isUnreliable(row) ? row.status : ""]
       .filter(Boolean).join("\n");
     const current = [reportFacts, manual && (reportFacts ? "人工补充 · " + manual : manual)].filter(Boolean).join("\n");
     const previousCheck = edits.get(row.id)?.check?.trim();

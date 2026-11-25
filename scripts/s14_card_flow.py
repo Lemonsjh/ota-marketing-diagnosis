@@ -99,6 +99,9 @@ def handle(account, chat, sender, text, message_id="", *, operation="event", tic
 
     result = entry._run_database(row["prompt"], chat_id=chat, sender_id=sender, requested_hotel_id=hotel,
                                  manual_room_type_names=json.loads(row["names"]))
+    card = (entry._result_payload(result, "card") or {}).get("card")
+    if card:
+        return {"card": card}
     return {"text": entry._result_payload(result, "text") or "本次未取得报告结果，请重新发起诊断。"}
 
 

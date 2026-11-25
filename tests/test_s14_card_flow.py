@@ -18,12 +18,14 @@ class SourceChoiceTest(unittest.TestCase):
 
     def test_database_button_and_typed_reply_start_one_report(self):
         prompt = self.event("生成诊断报告")
+        self.assertNotIn("第11项", str(prompt["card"]))
         button = prompt["card"]["elements"][-1]["actions"][0]["value"]["command"]
         self.assertEqual(self.event(button, "another")["text"], flow.EXPIRED)
         job = self.event(button)["job"]
         self.assertNotIn("job", self.event("数据库"))
-        with patch.object(flow.entry, "_run_database", return_value={"feishu_message": "报告链接"}) as run:
-            self.assertEqual(self.event("", operation="run", ticket=job)["text"], "报告链接")
+        card = {"elements": [{"tag": "markdown", "content": "**携程｜44.7/100**"}]}
+        with patch.object(flow.entry, "_run_database", return_value={"feishu_card": {"card": card}}) as run:
+            self.assertEqual(self.event("", operation="run", ticket=job), {"card": card})
             self.assertEqual(self.event("", operation="run", ticket=job), {})
             self.assertEqual(run.call_args.kwargs["requested_hotel_id"], "hotel")
             run.assert_called_once()

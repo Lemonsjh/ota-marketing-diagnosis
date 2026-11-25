@@ -461,7 +461,7 @@ def _source_selection_card(manual_names: list[str] | None = None) -> dict[str, A
     manual_note = (
         f"\n\n已记录人工房型名称：**{'、'.join(manual_names)}**"
         if manual_names
-        else "\n\n第11项为人工输入项；可发送：`房型名称：五人战队套房、电竞双床房`。"
+        else ""
     )
     elements: list[dict[str, Any]] = [
         {
